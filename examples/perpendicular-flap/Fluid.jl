@@ -6,7 +6,7 @@ using WaterLilyPreCICE
 using WriteVTK
 
 # needed to enable set operations on boundary curves
-ParametricBodies.notC¹(l::NurbsLocator{C},uv) where C<:NurbsCurve{n,d} where {n,d} = false
+# ParametricBodies.notC¹(l::NurbsLocator{C},uv) where C<:NurbsCurve{n,d} where {n,d} = false
 
 
 let # setting local scope for dt outside of the while loop

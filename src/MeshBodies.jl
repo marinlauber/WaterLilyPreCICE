@@ -198,10 +198,11 @@ function volume(body::MeshBody)
 end
 
 import WaterLily: interp
-function forces(body::MeshBody,flow::Flow)
+function forces(body::MeshBody,flow::Flow,δ=2)
     f = zeros((3,len(body.mesh)))
     for (i,tri) in enumerate(body.mesh)
-        f[:,i] .= normal(tri) .* area(tri) * WaterLily.interp(center(tri) .* normal(tri), flow.p)
+        # interp is index based we need to as 1.5 to map from Cartesian to index space
+        f[:,i] .= normal(tri) .* area(tri) * WaterLily.interp(center(tri).+1.5 .+ δ.*normal(tri), flow.p)
     end
     return f
 end
