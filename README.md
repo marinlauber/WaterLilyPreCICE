@@ -17,6 +17,23 @@ Then, you can use the package in your julia scripts:
 using WaterLilyPreCICE
 ```
 
+Running the different solvers
+
+run `Julia`
+```bash
+preCICEJulia --project=/home/marin/Workspace/WaterLilyPreCICE/examples Fluid.jl precice-config.xml
+```
+
+run `G+Smo`
+```bash
+./Solid -c precice-config.xml
+```
+
+run `Calculix`
+```bash
+ccx_preCICE -i calculix -bg -precice-participant Calculix
+```
+
 ## Examples
 
 ### Turek-Hron with G+Smo
@@ -24,3 +41,6 @@ using WaterLilyPreCICE
 ...
 
 ![](assets/turek-hron.gif)
+
+
+### Limped model interface

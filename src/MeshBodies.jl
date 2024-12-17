@@ -64,6 +64,7 @@ function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
         end
     end
     push!(tmp,cnt) # push the last element
+    println(length(vcat(srf_id...)))
     # reshape the surface id vector, the first ID resets the count
     srf_id = ntuple(i->srf_id[tmp[i]:tmp[i+1]-1].-srf_id[1].+1,length(tmp)-1)
     return Mesh(points, faces),srf_id; close(fs);
@@ -71,7 +72,7 @@ end
 function parse_blocktype!(block, io, line)
     contains(line,"*NODE") && return block=Val{:NodeBlock}(),readline(io)
     contains(line,"*ELEMENT") && return block=Val{:ElementBlock}(),readline(io)
-    contains(line,"*ELSET, ELSET=") && return block=Val{:ElSetBlock}(),readline(io)
+    contains(line,"*ELSET, ELSET=") && (println(line);return block=Val{:ElSetBlock}(),readline(io))
     return block, line
 end
 

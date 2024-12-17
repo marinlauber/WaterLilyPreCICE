@@ -29,7 +29,8 @@ using PreCICE
 function initialize!(U,L;interface=:CalculiXInterface,kwargs...)
     
     # check that the interface exists
-    @assert interface in [:GismoInterface,:CalculiXInterface] "The interface specified does not exist"
+    @assert interface in [:GismoInterface,:CalculiXInterface,
+                          :LumpedInterface] "The interface specified does not exist"
 
     # keyword aguments might be specified
     if size(ARGS, 1) < 1
@@ -89,5 +90,8 @@ export CalculiXInterface
 # G+Smo specific interface functions
 include("GismoInterface.jl")
 export GismoInterface
+
+include("LumpedInterface.jl")
+export LumpedInterface
 
 end # module
