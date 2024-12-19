@@ -5,6 +5,7 @@ using StaticArrays
 using ForwardDiff
 
 struct MeshBody{T,F<:Function} <: AbstractBody
+    mesh0 :: GeometryBasics.Mesh # initial mesh, default to pointing to mesh
     mesh  :: GeometryBasics.Mesh
     srfID :: NTuple
     map   :: F
@@ -24,10 +25,10 @@ function MeshBody(fname;map=(x,t)->x,scale=1.0,boundary=true,thk=0f0,T=Float32)
     mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(tmp))
     bbox = Rect(mesh.position)
     bbox = Rect(bbox.origin.-max(4,thk),bbox.widths.+max(8,2thk))
-    MeshBody(mesh,srf_id,map,bbox,T(scale),T(thk/2),boundary)
+    MeshBody(mesh,mesh,srf_id,map,bbox,T(scale),T(thk/2),boundary)
 end
-Base.copy(b::MeshBody) = MeshBody(GeometryBasics.Mesh(b.mesh.position,GeometryBasics.faces(b.mesh)),
-                                  b.map,Rect(b.bbox),b,scale,b.half_thk,b.boundary)
+Base.copy(b::MeshBody) = (mesh=GeometryBasics.Mesh(b.mesh.position,GeometryBasics.faces(b.mesh));
+                         MeshBody(mesh,mesh,b.map,Rect(b.bbox),b,scale,b.half_thk,b.boundary))
 
 function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
     #INP file format
@@ -58,13 +59,12 @@ function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
             nodes = parse.(Int,split(line,",")[2:end])
             push!(faces, TriangleFace{Int}(facetype([findfirst(==(node),node_idx) for node in nodes])...)) # parse the face
         elseif BlockType == Val{:ElSetBlock}()
-            push!(srf_id,parse.(Int,split(line,",")[1])); cnt+=1
+            push!(srf_id, parse.(Int,split(line,",")[1])); cnt+=1
         else
             continue
         end
     end
     push!(tmp,cnt) # push the last element
-    println(length(vcat(srf_id...)))
     # reshape the surface id vector, the first ID resets the count
     srf_id = ntuple(i->srf_id[tmp[i]:tmp[i+1]-1].-srf_id[1].+1,length(tmp)-1)
     return Mesh(points, faces),srf_id; close(fs);
@@ -72,7 +72,7 @@ end
 function parse_blocktype!(block, io, line)
     contains(line,"*NODE") && return block=Val{:NodeBlock}(),readline(io)
     contains(line,"*ELEMENT") && return block=Val{:ElementBlock}(),readline(io)
-    contains(line,"*ELSET, ELSET=") && (println(line);return block=Val{:ElSetBlock}(),readline(io))
+    contains(line,"*ELSET, ELSET=") && return block=Val{:ElSetBlock}(),readline(io)
     return block, line
 end
 
@@ -170,6 +170,7 @@ end
 @inbounds @inline d²(tri::GeometryBasics.Ngon{3},x) = sum(abs2,x-locate(tri,x)) #4.425 ns (0 allocations: 0 bytes)
 @inbounds @inline center(tri::GeometryBasics.Ngon{3}) = SVector(sum(tri.points;dims=1)/3.f0...) #1.696 ns (0 allocations: 0 bytes)
 @inbounds @inline area(tri::GeometryBasics.Ngon{3}) = 0.5*√sum(abs2,cross(SVector(tri.points[2]-tri.points[1]),SVector(tri.points[3]-tri.points[1]))) #1.784 ns (0 allocations: 0 bytes)
+@inbounds @inline dS(tri::GeometryBasics.Ngon{3}) = 0.5cross(SVector(tri.points[2]-tri.points[1]),SVector(tri.points[3]-tri.points[1]))
 """
     measure(mesh::GeometryBasics.Mesh,x,t;kwargs...)
 
@@ -206,4 +207,20 @@ function forces(body::MeshBody,flow::Flow,δ=2)
         f[:,i] .= normal(tri) .* area(tri) * WaterLily.interp(center(tri).+1.5 .+ δ.*normal(tri), flow.p)
     end
     return f
+end
+
+using Printf: @sprintf
+import WaterLily
+using WriteVTK
+# access the WaterLily writter to save the file
+function WaterLily.write!(w,a::MeshBody)
+    k = w.count[1]
+    points = hcat([[p.data...] for p ∈ a.mesh.position]...)
+    cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, Base.to_index.(face)) for face in faces(a.mesh)]
+    vtk = vtk_grid(w.dir_name*@sprintf("/%s_%06i", w.fname, k), points, cells) 
+    for (name,func) in w.output_attrib
+        vtk[name] = func(a)
+    end
+    vtk_save(vtk); w.count[1]=k+1
+    w.collection[k]=vtk
 end

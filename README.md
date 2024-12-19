@@ -21,7 +21,8 @@ Running the different solvers
 
 run `Julia`
 ```bash
-preCICEJulia --project=/home/marin/Workspace/WaterLilyPreCICE/examples Fluid.jl precice-config.xml
+julia --project=../../ Fluid.jl ../precice-config.xml
+# preCICEJulia --project=/home/marin/Workspace/WaterLilyPreCICE/examples Fluid.jl precice-config.xml
 ```
 
 run `G+Smo`

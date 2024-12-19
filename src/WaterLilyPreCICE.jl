@@ -60,8 +60,14 @@ function readData!(interface::AbstractInterface,sim::Simulation,store::Store)
     readData!(interface)
 end
 
-function update!(interface::AbstractInterface,sim::Simulation;kwargs...)
-    @warn "not implemented"
+macro notimplemented(message="not implemented")
+    quote
+        error($esc(message))
+    end
+end
+
+function update!(interface::AbstractInterface,args...;kwargs...)
+    @notimplemented "`update!` not implemented for `AbstractInterface`, it must to be (type) specialized"
 end
 
 function step!(flow::Flow,pois::AbstractPoisson,body,interface::AbstractInterface)
@@ -85,7 +91,7 @@ export initialize!,Store,readData!,update!,step!,writeData!
 
 # CalculiX specific interface functions
 include("CalculiXInterface.jl")
-export CalculiXInterface
+export CalculiXInterface,MeshBody
 
 # G+Smo specific interface functions
 include("GismoInterface.jl")

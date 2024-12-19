@@ -1,25 +1,41 @@
-using WaterLily
+using WaterLily,WriteVTK
 using WaterLilyPreCICE
 using GeometryBasics
-# using GLMakie
 using Interpolations
 
-# GLMakie.activate!(inline=false)
 # # create the mesh body
-MeshBody = WaterLilyPreCICE.MeshBody
-body = MeshBody("/home/marin/Workspace/HHH/code/LIMO_heart/LIMO_4_contact/geom_restart.inp";boundary=false,thk=2,scale=1.f00)
-# mesh(body.mesh.position, GLTriangleFace.(GeometryBasics.faces(body.mesh))) |> display
-mesh = body.mesh;
+body = MeshBody("/home/marin/Workspace/WaterLilyPreCICE/examples/LIMO_4/Solid/geom.inp";boundary=false,thk=2,scale=1.f00)
 # check that the mesh is loaded correctly
 un = vcat(body.srfID...)
 @assert length(body.mesh) == maximum(un)
 
-T = Float32
-vertices = Array{T,2}(undef, length(body.mesh.position), 3)
-for i in 1:length(mes.positio.mesh)
-    vertices[i,:] .= mesh.position[i]
+function static_inflation(i)
+    i==1 && return  0.38
+    i==6 && return -0.38
+    i in [2,3] && return -0.1
+    i in [4,5] && return  0.48
+    i in [7,8] && return  0.1
+    i in [9,10] && return -0.48
 end
-# hcat(mesh.position...)
+
+_srf(a::MeshBody) = getindex.(mapreduce(((i,ids),)->map(T->(i,T),ids),vcat,enumerate(a.srfID)),1)
+_center(a::MeshBody) = WaterLilyPreCICE.center.(a.mesh)
+_normal(a::MeshBody) = WaterLilyPreCICE.normal.(a.mesh)
+_dS(a::MeshBody) = _p(a).*WaterLilyPreCICE.normal.(a.mesh)
+function _p(a::MeshBody) 
+    pressure = zeros(size(a.mesh))
+    for (i,id) in mapreduce(((i,ids),)->map(T->(i,T),ids),vcat,enumerate(a.srfID))
+        pressure[id] = static_inflation(i)
+    end
+    return pressure
+end
+
+custom = Dict(
+    "SRF" =>_srf, "center"=>_center, "normal"=>_normal, "dS" => _dS, "p"=> _p
+)
+wr = vtkWriter("MeshBody"; attrib=custom)
+write!(wr,body)
+close(wr)
 
 # # tri select fewer surface
 # let
