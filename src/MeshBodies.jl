@@ -190,24 +190,13 @@ end # 120.029 ns (0 allocations: 0 bytes)d # 4.266 μs (0 allocations: 0 bytes)
 
 # use divergence theorem to calculate volume of surface mesh
 # F⃗⋅k⃗ = -⨕pn⃗⋅k⃗ dS = ∮(C-ρgz)n⃗⋅k⃗ dS = ∫∇⋅(C-ρgzk⃗)dV = ρg∫∂/∂z(ρgzk⃗)dV = ρg∫dV = ρgV #
-function volume(body::MeshBody)
-    vol = zeros(3)
-    for tri in body.mesh
-        # this is the hydrostatic pressure contribution of every triangle in the 3 axis
-        vol .+= center(tri) .* normal(tri) .* area(tri)
-    end
-    return vol
-end
+volume(a::GeometryBasics.Mesh) = mapreduce(T->center(T).*dS(T),+,a)
+volume(body::MeshBody) = volume(body.mesh)
 
 import WaterLily: interp
-function forces(body::MeshBody,flow::Flow,δ=2)
-    f = zeros((3,len(body.mesh)))
-    for (i,tri) in enumerate(body.mesh)
-        # interp is index based we need to as 1.5 to map from Cartesian to index space
-        f[:,i] .= normal(tri) .* area(tri) * WaterLily.interp(center(tri).+1.5 .+ δ.*normal(tri), flow.p)
-    end
-    return f
-end
+forces(a::GeometryBasics.Mesh,b::Flow,δ=2) = map(T->(c=center(T);n=normal(T);ar=area(T);
+                                                 ar.*n.*WaterLily.interp(center(tri).+1.5 .+ δ.*normal(tri), b.p)),a)
+forces(body::MeshBody,b::Flow,δ=2) = forces(body.mesh,b,δ)
 
 using Printf: @sprintf
 import WaterLily
