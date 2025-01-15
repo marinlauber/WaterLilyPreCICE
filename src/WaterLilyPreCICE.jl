@@ -3,6 +3,9 @@ module WaterLilyPreCICE
 using WaterLily
 using StaticArrays
 
+using Reexport
+@reexport using WaterLily
+
 # structure to store fluid state
 mutable struct Store
     uˢ:: AbstractArray
@@ -26,6 +29,7 @@ abstract type AbstractInterface end
 export AbstractInterface
 
 using PreCICE
+@reexport using PreCICE
 function initialize!(U,L;interface=:CalculiXInterface,kwargs...)
     
     # check that the interface exists
@@ -92,6 +96,7 @@ export initialize!,Store,readData!,update!,step!,writeData!
 # CalculiX specific interface functions
 include("CalculiXInterface.jl")
 export CalculiXInterface,MeshBody
+@reexport using GeometryBasics
 
 # G+Smo specific interface functions
 include("GismoInterface.jl")

@@ -1,4 +1,7 @@
 using PreCICE
+using CirculatorySystemModels
+using ModelingToolkit
+using OrdinaryDiffEq
 
 mutable struct LumpedInterface <: AbstractInterface
     mesh0:: GeometryBasics.Mesh # initial geometry, never changed
@@ -7,14 +10,16 @@ mutable struct LumpedInterface <: AbstractInterface
     vertices :: AbstractArray # might not be needed
     ControlPointsID::AbstractArray
     forces :: AbstractArray
-    σ :: AbstractArray # face storage vector
     func :: Function
     map_id :: AbstractVector
     dt :: Vector{Float64}
+    Q :: Float64
+    P :: Float64
+    integrator :: Union{Nothing,OrdinaryDiffEq.ODEIntegrator}
 end
 export LumpedInterface
 
-function LumpedInterface(;fname="../Solid/geom.inp",T=Float64,func=(i,t)->0)
+function LumpedInterface(;fname="../Solid/geom.inp",T=Float64,func=(i,t)->0,prob=nothing)
 
     # keyword aguments might be specified
     if size(ARGS, 1) < 1
@@ -51,19 +56,33 @@ function LumpedInterface(;fname="../Solid/geom.inp",T=Float64,func=(i,t)->0)
         quadPoints[i,:] .= center(mesh[i])
     end
 
-    # maping from center to nodes
-    tmp = mapreduce(((i,F),)->vcat(map(T->(i,T),Base.to_index.(F).data)...),vcat,enumerate(faces(mesh)))
-    map_id = map(i->getindex.(tmp,1)[findall(==(i),getindex.(tmp,2))],1:numberOfVertices)
-
-    # forces are located on the nodes this time
+    # mapping from center to nodes, needed for the forces
     forces = zeros(T, size(ControlPoints))
-    σ = Array{T,2}(undef, length(mesh), dimensions)
+    map_id = map(((i,F),)->vcat(Base.to_index.(F).data...),enumerate(faces(mesh)))
+
+    # link elements to surface IDs
     srf_id = mapreduce(((i,ids),)->map(T->(i,T),ids),vcat,enumerate(srf_id))
+
+    # generate lumped model, if the 'prob' is not provided, we return a nothing
+    integrator = init(prob, Vern7(), reltol=1e-6, abstol=1e-9)
+
     # return interface
-    LumpedInterface(mesh,deepcopy(mesh),srf_id,vertices,ControlPointsID,forces,σ,func,map_id,Int[0.0])
+    LumpedInterface(mesh,deepcopy(mesh),srf_id,vertices,ControlPointsID,
+                    forces,func,map_id,Int[0.0],0.,0.,integrator)
 end
+
+# binding 
+OrdinaryDiffEq.init(a::Nothing, args...; kwargs...) = nothing # no init if now problem is provided
+OrdinaryDiffEq.step!(a::Nothing, args...; kwargs...) = nothing # no step if now integrator is provided
+
+"""
+    readData!(::LumpedInterface)
+
+Read the coupling data (displacements) and update the mesh position.
+"""
 function readData!(interface::LumpedInterface)
     # Read control point displacements
+    interface.Q = WaterLilyPreCICE.volume(interface.mesh)[1] # store the volume for flow rate compuation
     interface.vertices = PreCICE.readData("Solid-Nodes", "Displacements", interface.ControlPointsID, interface.dt[end])
     # update the mesh
     points = Point3f[]
@@ -71,20 +90,32 @@ function readData!(interface::LumpedInterface)
         push!(points, Point3f(SA[pnt.data...] .+ interface.vertices[i,:]))
     end
     interface.mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(interface.mesh0))
+    # update flow rate
+    interface.Q = (WaterLilyPreCICE.volume(interface.mesh)[1] .- interface.Q) / interface.dt[end]
 end
 
+"""
+    update!(::LumpedInterface)
+
+Updates the interface conditions (the forces) from the interface function.
+"""
 function update!(interface::LumpedInterface)
     t = sum(@views(interface.dt[1:end])) # the time
-    map_id = interface.map_id # pointer
+    interface.forces .= 0 # reset the forces
+    # update 0D model
+    OrdinaryDiffEq.step!(interface.integrator, interface.dt[end], false)
+    # compute nodal forces
     for (i,id) in interface.srfID
-        interface.σ[id,:] .= dS(@views(interface.mesh[id])).*interface.func(i,t)
-    end
-    for i in 1:length(interface.mesh.position)
-        # 1/3 of the force of each triangle is added to each node
-        interface.forces[i,:] .= transpose(sum(interface.σ[map_id[i],:]./3,dims=1))
+        f = dS(@views(interface.mesh[id])).*interface.func(i,t)
+        interface.forces[interface.map_id[id],:] .+= transpose(f)./3 # add all the contribution from the faces to the nodes
     end
 end
 
+"""
+    writeData!(::LumpedInterface)
+
+Write the coupling data.
+"""
 function writeData!(interface::LumpedInterface)
     # write the force at the quad points
     PreCICE.writeData("Solid-Nodes", "Forces", interface.ControlPointsID, interface.forces)
