@@ -95,7 +95,7 @@ export initialize!,Store,readData!,update!,step!,writeData!
 
 # CalculiX specific interface functions
 include("CalculiXInterface.jl")
-export CalculiXInterface,MeshBody
+export CalculiXInterface,MeshBody,Tree,Bbox
 @reexport using GeometryBasics
 
 # G+Smo specific interface functions

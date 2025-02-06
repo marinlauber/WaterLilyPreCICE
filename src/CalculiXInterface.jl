@@ -3,6 +3,7 @@ using StaticArrays
 
 # can be cleaner
 include("MeshBodies.jl")
+include("KDTree.jl")
 
 """
     An structure to hold the coupling data for WaterLily-CalculiX coupling

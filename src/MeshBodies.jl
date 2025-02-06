@@ -7,19 +7,19 @@ using ForwardDiff
 struct MeshBody{T,F<:Function} <: AbstractBody
     mesh0 :: GeometryBasics.Mesh # initial mesh, default to pointing to mesh
     mesh  :: GeometryBasics.Mesh
-    srfID :: NTuple
+    srfID :: Union{Nothing,NTuple}
     map   :: F
     bbox  :: Rect
     scale :: T
     half_thk::T #half thickness
     boundary::Bool
 end
-function MeshBody(fname;map=(x,t)->x,scale=1.0,boundary=true,thk=0f0,T=Float32)
+function MeshBody(fname::String;map=(x,t)->x,scale=1.0,boundary=true,thk=0f0,T=Float32)
     if endswith(fname,".inp")
         tmp,srf_id = load_inp(fname)
     else
         tmp = load(fname)
-        srf_id = Int[[-1]]
+        srf_id = nothing
     end
     points = GeometryBasics.Point.(tmp.position*scale) # can we specify types?
     mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(tmp))
@@ -28,7 +28,7 @@ function MeshBody(fname;map=(x,t)->x,scale=1.0,boundary=true,thk=0f0,T=Float32)
     MeshBody(mesh,mesh,srf_id,map,bbox,T(scale),T(thk/2),boundary)
 end
 Base.copy(b::MeshBody) = (mesh=GeometryBasics.Mesh(b.mesh.position,GeometryBasics.faces(b.mesh));
-                         MeshBody(mesh,mesh,b.map,Rect(b.bbox),b,scale,b.half_thk,b.boundary))
+                          MeshBody(mesh,mesh,b.map,Rect(b.bbox),b,scale,b.half_thk,b.boundary))
 
 function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
     #INP file format
@@ -195,13 +195,13 @@ volume(body::MeshBody) = volume(body.mesh)
 
 import WaterLily: interp
 forces(a::GeometryBasics.Mesh,b::Flow,δ=2) = map(T->(c=center(T);n=normal(T);ar=area(T);
-                                                 ar.*n.*WaterLily.interp(center(tri).+1.5 .+ δ.*normal(tri), b.p)),a)
+                                                 ar.*n.*WaterLily.interp(c.+1.5 .+ δ.*n, b.p)),a)
 forces(body::MeshBody,b::Flow,δ=2) = forces(body.mesh,b,δ)
 
 using Printf: @sprintf
 import WaterLily
 using WriteVTK
-# access the WaterLily writter to save the file
+# access the WaterLily writer to save the file
 function WaterLily.write!(w,a::MeshBody)
     k = w.count[1]
     points = hcat([[p.data...] for p ∈ a.mesh.position]...)
