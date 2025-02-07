@@ -16,13 +16,14 @@ struct CalculiXInterface <: AbstractInterface
     quadPoint::AbstractArray
     forces::AbstractArray
     deformation::AbstractArray
+    map_id :: AbstractVector
     dt::Vector{Float64}
 end
 
 function CalculiXInterface(U,L;fname="geom.inp",map=(x,t)->x,scale=1.00,T=Float64)  
     
     # construct the body
-    println("REading mesh file ", fname)
+    println("Reading mesh file ", fname)
     println("Using map(0.) -> ", map(SA[0.,0.],0.0))
     println("Using scale ", scale)
     println("Using T ", T)
@@ -33,19 +34,24 @@ function CalculiXInterface(U,L;fname="geom.inp",map=(x,t)->x,scale=1.00,T=Float6
     numberOfVertices, dimensions = length(body.mesh.position), 3
     vertices = Array{Float64,2}(undef, numberOfVertices, dimensions)
     vertices .= hcat(body.mesh.position...)'
-    ControlPointsID = PreCICE.setMeshVertices("Fluid-Mesh-Nodes", vertices)
+    ControlPointsID = PreCICE.setMeshVertices("Fluid-Mesh", vertices)
     quadPoint = Array{Float64,2}(undef, length(body.mesh), dimensions)
     quadPoint .= hcat(center.(body.mesh)...)'
-    quadPointID = PreCICE.setMeshVertices("Fluid-Mesh-Faces", quadPoint)
+    # quadPointID = PreCICE.setMeshVertices("Fluid-Mesh", quadPoint)
 
     # storage arrays
-    forces = zeros(typeof(scale), size(quadPoint))
+    forces = zeros(typeof(scale), size(vertices))
     deformation = zeros(typeof(scale), size(vertices))
+
+    # mapping from center to nodes, needed for the forces
+    map_id = map(((i,F),)->vcat(Base.to_index.(F).data...),enumerate(faces(body.mesh)))
+
 
     # initilise PreCICE
     PreCICE.initialize()
     dt = PreCICE.getMaxTimeStepSize()
-    interface = CalculiXInterface(U, ControlPointsID, vertices, quadPointID, quadPoint, forces, deformation, [dt])
+    interface = CalculiXInterface(U, ControlPointsID, vertices,
+                                  quadPointID, quadPoint, forces, deformation, map_id, [dt])
     
     # return coupling interface
     return interface, body
@@ -53,17 +59,20 @@ end
 
 function readData!(interface::CalculiXInterface)
     # Read control point displacements
-    interface.deformation .= PreCICE.readData("Fluid-Mesh-Nodes", "Displacements", 
+    interface.deformation .= PreCICE.readData("Fluid-Mesh", "Displacements", 
                                               interface.ControlPointsID, interface.dt[end])
 end
 
 
-function update!(interface::CalculiXInterface,sim::Simulation;kwargs...)
-    # update the geom as this has not been done yet
-    # velocity = (position .- sim.body.position)./sim.flow.Δt[end]
-    # points = interface.ControlPoints .+ interface.deformation
-    # update the body
-    # sim.body = GeometryBasics.Mesh(points,GeometryBasics.faces(sim.body.mesh))
+function update!(interface::CalculiXInterface, sim)
+    t = sum(@views(interface.dt[1:end])) # the time
+    interface.forces .= 0 # reset the forces
+    # compute nodal forces
+    points = Point3f[]
+    for (i,pnt) in enumerate(interface.mesh0.position)
+        push!(points, Point3f(SA[pnt.data...] .+ interface.deformation[i,:]))
+    end
+    sim.body.mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(interface.mesh0))
 end
 
 function getInterfaceForces!(interface::CalculiXInterface,flow::Flow,body)
@@ -74,5 +83,5 @@ end
 function writeData!(interface::CalculiXInterface,sim::Simulation,store::Store)
     # write the force at the integration points
     #@TODO: permutedims might not be necessary
-    PreCICE.writeData("Fluid-Mesh-Faces", "Forces", interface.quadPointID, interface.forces)
+    PreCICE.writeData("Fluid-Mesh", "Forces", interface.ControlPointsID, interface.forces)
 end

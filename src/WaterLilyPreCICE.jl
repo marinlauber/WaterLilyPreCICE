@@ -6,80 +6,102 @@ using StaticArrays
 using Reexport
 @reexport using WaterLily
 
-# structure to store fluid state
-mutable struct Store
-    uˢ:: AbstractArray
-    pˢ:: AbstractArray
-    b :: AbstractBody
-    function Store(sim::Simulation)
-        new(copy(sim.flow.u),copy(sim.flow.p),copy(sim.body))
+# include helpers
+include("utils.jl")
+
+
+using PreCICE
+@reexport using PreCICE
+mutable struct CoupledSimulation <: AbstractSimulation
+    sim :: Simulation
+    int :: AbstractInterface
+    store :: Store
+    function CoupledSimulation(args...;  mem=Array, interface=:CalculiXInterface, kwargs...)
+        
+        # check that the interface exists
+        @assert interface in [:GismoInterface,:CalculiXInterface,
+                              :LumpedInterface] "The interface specified does not exist"
+
+        # keyword aguments might be specified
+        if size(ARGS, 1) < 1
+            configFileName = "precice-config.xml"
+        else
+            configFileName = ARGS[1]
+        end
+
+        # create coupling
+        PreCICE.createParticipant("Fluid", configFileName, 0, 1)
+
+        # generate the coupling interface from the coupling partner
+        interface, body = eval(interface)(U,L;kwargs...)
+
+        # WaterLily Simulation
+        sim = Simulation(args...; mem, body, kwargs...)
+        # storage for iteration
+        store =  Store(sim)
+        # return sim type
+        new(sim, interface, store)
     end
 end
-function store!(s::Store,sim::Simulation)
-    s.uˢ .= sim.flow.u; s.pˢ .= sim.flow.p
-    s.b = copy(sim.body)
-end
-function revert!(s::Store,sim::Simulation)
-    sim.flow.u .= s.uˢ; sim.flow.p .= s.pˢ; pop!(sim.flow.Δt)
-    pop!(sim.pois.n); pop!(sim.pois.n) # pop predictor and corrector
-    sim.body = s.b # nice and simple
-end
+# overlead properties
+Base.getproperty(f::CoupledSmiulation, s::Symbol) = s in propertynames(f) ? getfield(f, s) : getfield(f.sim, s)
 
 abstract type AbstractInterface end
 export AbstractInterface
 
-using PreCICE
-@reexport using PreCICE
-function initialize!(U,L;interface=:CalculiXInterface,kwargs...)
+# function initialize!(U,L;interface=:CalculiXInterface,kwargs...)
     
-    # check that the interface exists
-    @assert interface in [:GismoInterface,:CalculiXInterface,
-                          :LumpedInterface] "The interface specified does not exist"
+#     # check that the interface exists
+#     @assert interface in [:GismoInterface,:CalculiXInterface,
+#                           :LumpedInterface] "The interface specified does not exist"
 
-    # keyword aguments might be specified
-    if size(ARGS, 1) < 1
-        configFileName = "precice-config.xml"
-    else
-        configFileName = ARGS[1]
-    end
+#     # keyword aguments might be specified
+#     if size(ARGS, 1) < 1
+#         configFileName = "precice-config.xml"
+#     else
+#         configFileName = ARGS[1]
+#     end
 
-    # create coupling
-    PreCICE.createParticipant("Fluid", configFileName, 0, 1)
+#     # create coupling
+#     PreCICE.createParticipant("Fluid", configFileName, 0, 1)
 
-    # generate the coupling interface from the coupling partener
-    return eval(interface)(U,L;kwargs...)
-end
+#     # generate the coupling interface from the coupling partener
+#     return eval(interface)(U,L;kwargs...)
+# end
 
-function readData!(interface::AbstractInterface,sim::Simulation,store::Store)
+# function readData!(interface::AbstractInterface,sim::Simulation,store::Store)
+function readData!(sim::CoupledSimulation)
     # set time step
     dt_precice = PreCICE.getMaxTimeStepSize()
-    interface.dt[end] = dt_precice # min(sim.flow.Δt[end]*sim.U/sim.L, dt_precice) # min physical time step
-    sim.flow.Δt[end] = interface.dt[end]*sim.L/sim.U # numerical time step
+    sim.interface.dt[end] = dt_precice # min(sim.flow.Δt[end]*sim.U/sim.L, dt_precice) # min physical time step
+    sim.flow.Δt[end] = sim.interface.dt[end]*sim.L/sim.U # numerical time step
 
     if PreCICE.requiresWritingCheckpoint()
-        store!(store,sim)
+        store!(sim.store,sim)
     end
 
     # Read control point displacements, type specific
-    readData!(interface)
+    readData!(sim.interface)
 end
 
-macro notimplemented(message="not implemented")
-    quote
-        error($esc(message))
-    end
-end
+# macro notimplemented(message="not implemented")
+    # quote
+        # error($esc(message))
+    # end
+# end
 
-function update!(interface::AbstractInterface,args...;kwargs...)
-    @notimplemented "`update!` not implemented for `AbstractInterface`, it must to be (type) specialized"
-end
+# function update!(interface::AbstractInterface,args...;kwargs...)
+    # @notimplemented "`update!` not implemented for `AbstractInterface`, it must to be (type) specialized"
+# end
 
-function step!(flow::Flow,pois::AbstractPoisson,body,interface::AbstractInterface)
+import WaterLily: sim_step!
+function sim_step!(sim::CoupledSimulation)
     mom_step!(flow,pois)
     getInterfaceForces!(interface,flow,body)
 end
 
-function writeData!(interface::AbstractInterface,sim::Simulation,store::Store)
+# function writeData!(interface::AbstractInterface,sim::Simulation,store::Store)
+function writeData!(sim::CoupledSimulations)
     # write the force at the integration points
     writeData!(interface)
 
