@@ -25,10 +25,10 @@ function MeshBody(fname::String;map=(x,t)->x,scale=1.0,boundary=true,thk=0f0,T=F
     mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(tmp))
     bbox = Rect(mesh.position)
     bbox = Rect(bbox.origin.-max(4,thk),bbox.widths.+max(8,2thk))
-    MeshBody(mesh,mesh,srf_id,map,bbox,T(scale),T(thk/2),boundary)
+    return MeshBody(mesh,mesh,srf_id,map,bbox,T(scale),T(thk/2),boundary)
 end
 Base.copy(b::MeshBody) = (mesh=GeometryBasics.Mesh(b.mesh.position,GeometryBasics.faces(b.mesh));
-                          MeshBody(mesh,mesh,b.map,Rect(b.bbox),b,scale,b.half_thk,b.boundary))
+                          MeshBody(mesh,mesh,b.srfID,b.map,Rect(b.bbox),b.scale,b.half_thk,b.boundary))
 
 function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
     #INP file format
@@ -67,7 +67,9 @@ function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
     push!(tmp,cnt) # push the last element
     # reshape the surface id vector, the first ID resets the count
     srf_id = ntuple(i->srf_id[tmp[i]:tmp[i+1]-1].-srf_id[1].+1,length(tmp)-1)
-    return Mesh(points, faces),srf_id; close(fs);
+    close(fs)
+    mesh = Mesh(points, faces)
+    return mesh, srf_id
 end
 function parse_blocktype!(block, io, line)
     contains(line,"*NODE") && return block=Val{:NodeBlock}(),readline(io)
