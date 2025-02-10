@@ -38,4 +38,9 @@ end
     @assert dist(SA[1.5,1.0,1.0],rect) == √1.5
     @assert dist(SA[1.5,1.5,1.0],rect) == √2.25
     @assert dist(SA[1.5,1.5,1.5],rect) == √3.0
+    # can we compu the structure
+    b1 = MeshBody(mesh,mesh,...)
+    b2 = copy(b1)
+    @assert b1.mesh == b2.mesh
+    @assert all(b1.map(SA[0.,0.],0.) .≈ b2.map(SA[0.,0.],0.))
 end

@@ -1,6 +1,10 @@
 # WaterLily-PreCICE
 
-WaterLily.jl bindings to connect to the PreCICE coupling library
+[WaterLily.jl](https://github.com/WaterLily-jl/WaterLily.jl) bindings to connect to the [PreCICE](https://precice.org) coupling library
+
+## Prerequisites
+
+Before running any coupled simulation using `WaterLily.jl` and any other package with an excisting preCICE adapter, you will need a working version of preCICE, see [here](https://precice.org/installation-overview.html) for a detailed installation guide.
 
 ## Usage
 
@@ -37,6 +41,12 @@ ccx_preCICE -i calculix -bg -precice-participant Calculix
 
 ## Examples
 
+### Rigid Sphere in a flow
+
+...
+
+![](assets/rigid-sphere.gif)
+
 ### Turek-Hron with G+Smo
 
 ...
@@ -44,4 +54,13 @@ ccx_preCICE -i calculix -bg -precice-participant Calculix
 ![](assets/turek-hron.gif)
 
 
-### Limped model interface
+<!-- ### Lumped model interface -->
+
+### Contributing
+
+We always appreciate new contributions, so please submit a pull request with your changes and help us make this adapter better!
+
+Of course, ideas, suggestions, and questions are welcome too! Please raise an issue to address any of these.
+
+### Citing
+

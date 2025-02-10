@@ -7,6 +7,7 @@ mutable struct Store
         new(copy(sim.flow.u),copy(sim.flow.p),copy(sim.body))
     end
 end
+Base.copy(::WaterLily.NoBody) = WaterLily.NoBody()
 function store!(s::Store,sim::Simulation)
     s.uˢ .= sim.flow.u; s.pˢ .= sim.flow.p
     s.b = copy(sim.body)

@@ -7,7 +7,6 @@ include("Bodies.jl")
     An structure to hold the coupling data for WaterLily-Gismo coupling
 """
 struct GismoInterface <: AbstractInterface
-    U::Float64
     ControlPointsID::AbstractArray
     ControlPoints::AbstractArray
     quadPointID::AbstractArray
@@ -72,8 +71,8 @@ function getInterfaceForces!(interface::GismoInterface,flow::Flow{T},body::AbsBo
     end
 end
 import ParametricBodies: NurbsCurve, DynamicNurbsBody
-function GismoInterface(U,L;KnotMesh="KnotMesh",ControlPointMesh="ControlPointMesh",
-                         ForceMesh="ForceMesh",dir=nothing,curves=nothing,center=SA[0.,0.])
+function GismoInterface(; KnotMesh="KnotMesh",ControlPointMesh="ControlPointMesh",
+                          ForceMesh="ForceMesh",dir=nothing,curves=nothing,center=SA[0.,0.])
 
     # initilise PreCICE
     PreCICE.initialize()
@@ -104,12 +103,12 @@ function GismoInterface(U,L;KnotMesh="KnotMesh",ControlPointMesh="ControlPointMe
         cps = SMatrix{2,size(cps,2)}(cps)
         knot = SVector{length(knot)}(knot)
         weights = SA[ones(size(cps,2))...]
-        push!(bodies,DynamicNurbsBody(NurbsCurve(cps*L.+center,knot,weights)))
+        push!(bodies,DynamicNurbsBody(NurbsCurve(cps.+center,knot,weights)))
         push!(ops, ∩) # always interset with the next curve
     end
 
     # return coupling interface
-    interface = GismoInterface(U, ControlPointsID, ControlPoints, quadPointID, quadPoint, forces,
+    interface = GismoInterface(ControlPointsID, ControlPoints, quadPointID, quadPoint, forces,
                                   deformation, knots, [dt], direction, length(bodies), center)
     
     # add some passive curves if we want

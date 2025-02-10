@@ -6,3 +6,10 @@
 *.json
 *precice-run*
 *precice-run*
+*.12d
+*.cvg
+*.dat
+*.frd
+*.out
+*.sta
+*/WarnNodeMissMultiStage.nam

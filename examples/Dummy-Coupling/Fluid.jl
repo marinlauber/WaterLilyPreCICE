@@ -1,29 +1,32 @@
 using WaterLilyPreCICE,StaticArrays,WriteVTK
 
-function make_sphere(;L=32,Re=250,U=1)
-    # move the geometry to the center of the domain
-    map(x,t) = x .- SA[L,L,L/2]
-    body = MeshBody(joinpath(@__DIR__,"sphere.inp");map,scale=L/2)
-    # generate sim
-    Simulation((4L,2L,L), (U,0,0), L; ν=U*L/Re, body)
-end
+# function make_sphere(;L=32,Re=250,U=1)
+#     # move the geometry to the center of the domain
+#     map(x,t) = x .- SA[L,L,L/2]
+#     body = MeshBody(joinpath(@__DIR__,"sphere.inp");map,scale=L/2)
+#     # generate sim
+#     Simulation((4L,2L,L), (U,0,0), L; ν=U*L/Re, body)
+# end
 
-# make a writer with some attributes to output to the file
-velocity(a::Simulation) = a.flow.u |> Array;
-pressure(a::Simulation) = a.flow.p |> Array;
-_body(a::Simulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a.flow)); a.flow.σ |> Array;)
-_vbody(a::Simulation) = a.flow.V |> Array;
-mu0(a::Simulation) = a.flow.μ₀ |> Array;
-custom_attrib = Dict("u" => velocity, "p" => pressure, "d" => _body, "v" => _vbody, "μ₀" => mu0,)
+# # make a writer with some attributes to output to the file
+# velocity(a::Simulation) = a.flow.u |> Array;
+# pressure(a::Simulation) = a.flow.p |> Array;
+# _body(a::Simulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a.flow)); a.flow.σ |> Array;)
+# _vbody(a::Simulation) = a.flow.V |> Array;
+# mu0(a::Simulation) = a.flow.μ₀ |> Array;
+# custom_attrib = Dict("u" => velocity, "p" => pressure, "d" => _body, "v" => _vbody, "μ₀" => mu0,)
 
-# make the sim
-sim = make_sphere(L=32)
-# make the paraview writer
-wr = vtkWriter("WaterLily-Dummy";attrib=custom_attrib)
+# # make the sim
+# sim = make_sphere(L=32)
+# # make the paraview writer
+# wr = vtkWriter("WaterLily-Dummy";attrib=custom_attrib)
 
 # just a mesh
-# L,Re,U = 2^5,100,1
-# body = MeshBody("sphere.inp")
+L,Re,U = 2^5,100,1
+body = MeshBody("sphere.inp")
+
+flow = Flow((4L,2L,L), (U,0,0); f=Array, Δt=0.25, ν=0.35)
+pois = MultiLevelPoisson(flow.p,flow.μ₀,flow.σ)
 
 let
     # keyword aguments might be specified
@@ -36,7 +39,7 @@ let
     PreCICE.createParticipant("WaterLily", configFileName, 0, 1)
 
     # # get nodes and elements IDS from precice
-    body = sim.body;
+    # body = sim.body;
     numberOfVertices, dimensions = length(body.mesh.position), 3
     vertices = Array{Float64,2}(undef, numberOfVertices, dimensions)
     for i in 1:numberOfVertices
@@ -51,11 +54,8 @@ let
     PreCICE.initialize()
     dt = PreCICE.getMaxTimeStepSize()
 
-    # writer for the sim
-    wr = vtkWriter("Perp-Flap"; attrib=custom_attrib)
-    iter,every = 0,1
-
     # run precice
+    iter,every = 0,1
     while PreCICE.isCouplingOngoing()
 
         # set time step
@@ -73,6 +73,8 @@ let
 
         # update the this participant
         @show "sim_step!"
+        @inside flow.p[I] = 0.0
+        mom_step!(flow,pois)
         # WaterLily.sim_step!(sim;remeasure=false)
         forces .-= 1.0
 
@@ -91,12 +93,12 @@ let
         # if we have converged, save if required
         if PreCICE.isTimeWindowComplete()
             # save the data
-            mod(iter,every)==0 && write!(wr, sim)
+            # mod(iter,every)==0 && write!(wr, sim)
             iter += 1
         end
     end
     # end
-    close(wr)
+    # close(wr)
     PreCICE.finalize()
 end
 println("WaterLily: Closing Julia solver...")
