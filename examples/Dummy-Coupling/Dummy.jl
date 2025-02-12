@@ -2,7 +2,8 @@ using WaterLilyPreCICE,StaticArrays
 
 # just a mesh
 L,Re,U = 2^5,100,1
-body = MeshBody("sphere.inp")
+map(x,t) = x .- SA[L,L,L/2]
+body = MeshBody(joinpath(@__DIR__,"../../meshes/sphere.inp");map,scale=L/2)
 
 let
     # keyword aguments might be specified
@@ -38,23 +39,18 @@ let
         dt = dt_precice
 
         # read the data from the other participant
-        @show "readData!"
         if PreCICE.requiresWritingCheckpoint()
             @show "store!(store,sim)"
         end
         readData = PreCICE.readData("Solid-Mesh", "Forces", ControlPointsID, dt)
-        @show readData[1:4,:]
 
         # update the this participant
-        @show "sim_step!"
         deformation .+= 1.0
 
         # write data to the other participant
-        @show "writeData!" 
         PreCICE.writeData("Solid-Mesh", "Displacements", ControlPointsID, deformation)
         
         # advance coupling
-        @show "advance!"
         dt = PreCICE.advance(dt)
         # read checkpoint if required or move on
         if PreCICE.requiresReadingCheckpoint()

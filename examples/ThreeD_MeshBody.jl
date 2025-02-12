@@ -1,4 +1,4 @@
-using WaterLily,WaterLilyPreCICE,StaticArrays,WriteVTK
+using WaterLilyPreCICE,StaticArrays,WriteVTK
 
 function make_sphere(;L=32,Re=250,U=1)
     # move the geometry to the center of the domain
@@ -32,6 +32,7 @@ t₀,duration,step = 0.,10,0.1
     # update until time tᵢ in the background
     sim_step!(sim,tᵢ;remeasure=true)
     write!(wr,sim)
+    f = WaterLilyPreCICE.forces(sim.body,sim.flow)
     # print time step
     println("tU/L=",round(tᵢ,digits=4),", Δt=",round(sim.flow.Δt[end],digits=3))
 end

@@ -4,7 +4,7 @@ using WaterLily: AbstractBody,@loop,measure
 using StaticArrays
 using ForwardDiff
 
-struct MeshBody{T,F<:Function} <: AbstractBody
+mutable struct MeshBody{T,F<:Function} <: AbstractBody
     mesh0 :: GeometryBasics.Mesh # initial mesh, default to pointing to mesh
     mesh  :: GeometryBasics.Mesh
     srfID :: Union{Nothing,NTuple}
@@ -67,9 +67,8 @@ function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
     push!(tmp,cnt) # push the last element
     # reshape the surface id vector, the first ID resets the count
     srf_id = ntuple(i->srf_id[tmp[i]:tmp[i+1]-1].-srf_id[1].+1,length(tmp)-1)
-    close(fs)
-    mesh = Mesh(points, faces)
-    return mesh, srf_id
+    close(fs) # close file stream
+    return Mesh(points, faces), srf_id
 end
 function parse_blocktype!(block, io, line)
     contains(line,"*NODE") && return block=Val{:NodeBlock}(),readline(io)
@@ -179,9 +178,9 @@ end
 Measure the distance `d` and normal `n` to the mesh at point `x` and time `t`.
 """
 function WaterLily.measure(mesh::GeometryBasics.Mesh,x::SVector{T},t;kwargs...) where T
-    u=1; a=b=d²_fast(mesh[1],x) # fast method
+    u=1; a=b=d²(mesh[1],x) # fast method
     for I in 2:length(mesh)
-        b = d²_fast(mesh[I],x)
+        b = d²(mesh[I],x)
         b<a && (a=b; u=I) # Replace current best
     end
     n = normal(mesh[u])
