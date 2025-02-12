@@ -139,15 +139,14 @@ outside(x::SVector,bbox::Rect) = !(all(bbox.origin .≤ x) && all(x .≤ bbox.or
 # distance to box center
 dist(x::SVector,bbox::Rect) = √sum(abs2,x.-bbox.origin-0.5bbox.widths) # 1.707 ns (0 allocations: 0 bytes)
 
-WaterLily.sdf(body::MeshBody,x,t;kwargs...) = (d=measure(body.mesh,body.map(x,t),t;kwargs...)[1];
-                                               !body.boundary && (d = abs(d)-body.half_thk); return d) # if the mesh is not a boundary, we need to adjust the distance
-
+WaterLily.sdf(body::MeshBody,x,t;kwargs...) = measure(body,x,t;kwargs...)[1]
+# overload measure
 function WaterLily.measure(body::MeshBody,x,t,;kwargs...)
     # eval d=map(x,t)-x, and n̂
     ξ = body.map(x,t)
     #  if we are outside of the bouding box, we can measure approx
-    outside(ξ,body.bbox) && return (dist(ξ,body.bbox),zero(x),zero(x))
-    d,n = measure(body.mesh,ξ,t)
+    outside(ξ,body.bbox) && (d=dist(ξ,body.bbox); return (body.boundary ? d : abs(d)-body.half_thk,zero(x),zero(x)))
+    d,n = measure(body.mesh,ξ,t;kwargs...)
     !body.boundary && (d = abs(d)-body.half_thk) # if the mesh is not a boundary, we need to adjust the distance
 
     # The velocity depends on the material change of ξ=m(x,t):
@@ -165,11 +164,11 @@ Return the normal vector to the triangle `tri`.
 """
 function normal(tri::GeometryBasics.Ngon{3}) #3.039 ns (0 allocations: 0 bytes)
     n = cross(SVector(tri.points[2]-tri.points[1]),SVector(tri.points[3]-tri.points[1]))
-    n/√sum(abs2,n)
+    n/(√sum(abs2,n)+eps(eltype(n))) # zero area triangles
 end
 @inbounds @inline d²_fast(tri::GeometryBasics.Ngon{3},x) = sum(abs2,x-center(tri)) #1.825 ns (0 allocations: 0 bytes)
 @inbounds @inline d²(tri::GeometryBasics.Ngon{3},x) = sum(abs2,x-locate(tri,x)) #4.425 ns (0 allocations: 0 bytes)
-@inbounds @inline center(tri::GeometryBasics.Ngon{3}) = SVector(sum(tri.points;dims=1)/3.f0...) #1.696 ns (0 allocations: 0 bytes)
+@inbounds @inline center(tri::GeometryBasics.Ngon{3}) = SVector(sum(tri.points)/3.f0...) #1.696 ns (0 allocations: 0 bytes)
 @inbounds @inline area(tri::GeometryBasics.Ngon{3}) = 0.5*√sum(abs2,cross(SVector(tri.points[2]-tri.points[1]),SVector(tri.points[3]-tri.points[1]))) #1.784 ns (0 allocations: 0 bytes)
 @inbounds @inline dS(tri::GeometryBasics.Ngon{3}) = 0.5cross(SVector(tri.points[2]-tri.points[1]),SVector(tri.points[3]-tri.points[1]))
 """
@@ -178,9 +177,9 @@ end
 Measure the distance `d` and normal `n` to the mesh at point `x` and time `t`.
 """
 function WaterLily.measure(mesh::GeometryBasics.Mesh,x::SVector{T},t;kwargs...) where T
-    u=1; a=b=d²(mesh[1],x) # fast method
+    u=1; a=b=d²_fast(mesh[1],x) # fast method
     for I in 2:length(mesh)
-        b = d²(mesh[I],x)
+        b = d²_fast(mesh[I],x)
         b<a && (a=b; u=I) # Replace current best
     end
     n = normal(mesh[u])
@@ -195,9 +194,12 @@ volume(a::GeometryBasics.Mesh) = mapreduce(T->center(T).*dS(T),+,a)
 volume(body::MeshBody) = volume(body.mesh)
 
 import WaterLily: interp
-forces(a::GeometryBasics.Mesh,b::Flow,δ=2) = map(T->(c=center(T);n=normal(T);ar=area(T);
-                                                 ar.*n.*WaterLily.interp(c.+1.5 .+ δ.*n, b.p)),a)
-forces(body::MeshBody,b::Flow,δ=2) = forces(body.mesh,b,δ)
+function get_p(tri::GeometryBasics.Ngon{3},p,δ)
+    c=center(tri);n=normal(tri);ar=area(tri);
+    ar.*n.*interp(c.+1.5 .+ δ.*n, p)
+end
+forces(a::GeometryBasics.Mesh, flow::Flow, δ=2) = map(T->get_p(T,flow.p,δ), a)
+forces(body::MeshBody ,b::Flow, δ=2) = forces(body.mesh, b, δ)
 
 using Printf: @sprintf
 import WaterLily
