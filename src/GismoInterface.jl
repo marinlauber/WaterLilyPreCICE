@@ -20,40 +20,6 @@ struct GismoInterface <: AbstractInterface
     center::AbstractVector
 end
 
-# unpack subarray of inceasing values of an hcat
-function unpack(a)
-    tmp=[a[1]]; ks=Vector{Number}[]
-    for i ∈ 2:length(a)
-        if a[i]>=a[i-1]
-            push!(tmp,a[i])
-        else
-            push!(ks,tmp); tmp=[a[i]]
-        end
-    end
-    push!(ks,tmp)
-    return ks
-end
-function knotVectorUnpack(knots)
-    knots = reshape(knots,reverse(size(knots)))[1,:]
-    unpack(knots)
-end
-
-function getControlPoints(points, knots)
-    points = reshape(points,reverse(size(points)))
-    ncp = [length(knot)-count(i->i==0,knot) for knot in knots]
-    @assert sum(ncp) == size(points,2) "Number of control points does not match the number of points"
-    return [points[:,1+sum(ncp[1:i])-ncp[1]:sum(ncp[1:i])] for i in 1:length(ncp)]
-end
-function quadPointUnpack(quadPoints)
-    quadPoints = reshape(quadPoints,reverse(size(quadPoints)))
-    quadPoints = [filter(!isone,filter(!iszero,quadPoints[:,i]))[1] for i in 1:size(quadPoints,2)]
-    unpack(quadPoints)
-end
-function getDeformation(points,knots)
-    ncp = [length(knot)-count(i->i==0,knot) for knot in knots]
-    return [points[:,1+sum(ncp[1:i])-ncp[1]:sum(ncp[1:i])] for i in 1:length(ncp)]
-end
-
 using ParametricBodies: _pforce, _vforce
 """
     getInterfaceForces!(forces,flow::Flow,body::AbsBodies,quadPoints)
@@ -103,7 +69,7 @@ function GismoInterface(; KnotMesh="KnotMesh",ControlPointMesh="ControlPointMesh
         cps = SMatrix{2,size(cps,2)}(cps)
         knot = SVector{length(knot)}(knot)
         weights = SA[ones(size(cps,2))...]
-        push!(bodies,DynamicNurbsBody(NurbsCurve(cps.+center,knot,weights)))
+        push!(bodies,DynamicNurbsBody(NurbsCurve(cps.+center, knot, weights)))
         push!(ops, ∩) # always interset with the next curve
     end
 
@@ -125,20 +91,18 @@ function readData!(interface::GismoInterface)
     # Read control point displacements
     readData = transpose(PreCICE.readData("ControlPointMesh", "ControlPointData", 
                                           interface.ControlPointsID, interface.dt[end]))
-    interface.deformation .= getDeformation(readData,interface.knots) # repack correctly
+    interface.deformation .= getDeformation(readData, interface.knots) # repack correctly
 end
 import ParametricBodies
-function update!(interface::GismoInterface,sim::Simulation;kwargs...)
+function update!(interface::GismoInterface, sim::Simulation; kwargs...)
     # update the geom as this has not been done yet
     for i in 1:interface.N
         new = interface.ControlPoints[i].+interface.deformation[i]
         interface.dir[i] != 1 && (new = reverse(new;dims=2))
         # time step is the (numerical) time between data exchange
-        new = SMatrix{size(new)...}(new.*sim.L.+interface.center)
-        sim.body.bodies[i] = ParametricBodies.update!(sim.body.bodies[i],new,sim.flow.Δt[end])
+        new = SMatrix{size(new)...}(new.*sim.L .+ interface.center)
+        sim.body.bodies[i] = ParametricBodies.update!(sim.body.bodies[i], new, sim.flow.Δt[end])
     end
-    # solver update
-    WaterLily.measure!(sim)
 end
 
 function writeData!(interface::GismoInterface)

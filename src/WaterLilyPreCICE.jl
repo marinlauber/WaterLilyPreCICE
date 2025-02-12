@@ -58,7 +58,7 @@ end
 
 # overload sim_step!
 import WaterLily: sim_step!
-function sim_step!(sim::CoupledSimulation;kwargs...)
+function sim_step!(sim::CoupledSimulation; kwargs...)
     # update the this participant this is type-specialized
     WaterLilyPreCICE.update!(sim.int, sim; kwargs...)
     # measure and momentum step
