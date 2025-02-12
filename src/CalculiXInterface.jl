@@ -16,7 +16,7 @@ struct CalculiXInterface <: AbstractInterface
     dt::Vector{Float64}
 end
 
-function CalculiXInterface(T=Float64;fname="geom.inp",map=(x,t)->x,scale=1.f0,kwargs...)  
+function CalculiXInterface(T=Float64; fname="geom.inp", map=(x,t)->x, scale=1.f0, kwargs...)  
     # construct the body
     #@TODO this is just to get the connectivity in the end...
     body = MeshBody(fname ; map, scale, T)
@@ -51,7 +51,7 @@ function readData!(interface::CalculiXInterface)
                                               interface.ControlPointsID, interface.dt[end])
 end
 
-function update!(interface::CalculiXInterface, sim; kwargs...)
+function update!(interface::CalculiXInterface, sim::CoupledSimulation; kwargs...)
     # update mesh position, measure is done elsewhere
     points = Point3f[]
     for (i,pnt) in enumerate(sim.body.mesh0.position)

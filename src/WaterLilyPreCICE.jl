@@ -24,13 +24,20 @@ end
 # overlead properties
 Base.getproperty(f::CoupledSimulation, s::Symbol) = s in propertynames(f) ? getfield(f, s) : getfield(f.sim, s)
 
-function CoupledSimulation(args...; fname="geom.inp", map=(x,t)->x, scale=1.f0, T=Float64,
-                            mem=Array, interface=:CalculiXInterface, kwargs...)
+function CoupledSimulation(args...; T=Float64, mem=Array, interface=:CalculiXInterface, # WL specific
+                           fname="geom.inp", map=(x,t)->x, scale=1.f0, # CalculiX specific
+                           dir=nothing, curves=nothing, center=SA[0.,0.], # Gismo specific
+                           func=(i,t)->0, prob=nothing,                   # Lumped specific
+                           kwargs...) # args and kwargs are passed to Simulation
 
     # check that the interface exists
-    @assert length(args[1])==3 "Pure 2D simulations are not support, please make it 3D (Nx,Ny)->(Nx,Ny,1)"
     @assert interface in [:GismoInterface,:CalculiXInterface,
                           :LumpedInterface] "The interface specified does not exist"
+    if interface==:CalculiXInterface
+        @assert length(args[1])==3 "Pure 2D simulations are not support for CalculiX coupling, please make it 3D (Nx,Ny)->(Nx,Ny,1)"
+    elseif interface==:GismoInterface
+        @assert length(args[1])==2 "3D simulations are not support for Gismo coupling"
+    end
    
      # keyword aguments might be specified
     if size(ARGS, 1) < 1
@@ -43,7 +50,7 @@ function CoupledSimulation(args...; fname="geom.inp", map=(x,t)->x, scale=1.f0, 
     PreCICE.createParticipant("WaterLily", configFileName, 0, 1)
 
     # generate the coupling interface from the coupling partner
-    int, body = eval(interface)(T; fname, map ,scale, kwargs...)
+    int, body = eval(interface)(T; fname, map ,scale, dir, curves, center, func, prob)
 
     # the simulation
     sim = Simulation(args...; mem, T, body, kwargs...)

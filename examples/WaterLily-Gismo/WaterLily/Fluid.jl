@@ -1,19 +1,16 @@
 using WaterLilyPreCICE,ParametricBodies,StaticArrays,WriteVTK
 
 # make a writer with some attributes
-velocity(a::Simulation) = a.flow.u |> Array;
-pressure(a::Simulation) = a.flow.p |> Array;
-_body(a::Simulation) = (measure_sdf!(a.flow.σ, a.body); 
-                        a.flow.σ |> Array;)
-vorticity(a::Simulation) = (@inside a.flow.σ[I] = 
-                            WaterLily.curl(3,I,a.flow.u)*a.L/a.U;
-                            a.flow.σ |> Array;)
-_vbody(a::Simulation) = a.flow.V |> Array;
-mu0(a::Simulation) = a.flow.μ₀ |> Array;
+velocity(a::AbstractSimulation) = a.flow.u |> Array;
+pressure(a::AbstractSimulation) = a.flow.p |> Array;
+_body(a::AbstractSimulation) = (measure_sdf!(a.flow.σ, a.body); a.flow.σ |> Array;)
+vorticity(a::AbstractSimulation) = (@inside a.flow.σ[I] = WaterLily.curl(3,I,a.flow.u)*a.L/a.U; a.flow.σ |> Array;)
+_vbody(a::AbstractSimulation) = a.flow.V |> Array;
+mu0(a::AbstractSimulation) = a.flow.μ₀ |> Array;
 
 custom_attrib = Dict(
     "u" => velocity, "p" => pressure,
-    "d" => _body, "ω" => vorticity,
+    "d" => _body,  "ω" => vorticity,
     "v" => _vbody, "μ₀" => mu0
 )# this maps what to write to the name in the file
 
@@ -44,13 +41,12 @@ let # setting local scope for dt outside of the while loop
         # read the data from the other participant
         readData!(sim)
 
-        # measure the participant
-        WaterLilyPreCICE.update!(interface, sim)
-
         # update the this participant
         sim_step!(sim)
+
+        # access the data and change it during the run
         length(sim.flow.Δt)==2 && (sim.int.forces .= 0.0) # first time step
-        sim.int.forces .*= sim.int.U^2 # scale
+        sim.int.forces .*= Uref^2 # scale
 
         # write data to the other participant
         writeData!(sim)

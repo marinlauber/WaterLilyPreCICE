@@ -28,7 +28,7 @@ Compute the interface forces at the quadrature points `quadPoints` for each body
 """
 Index(Qs,i) = sum(length.(Qs[1:i-1]))+1:sum(length.(Qs[1:i]))
 using ParametricBodies: _pforce, _vforce
-function getInterfaceForces!(interface::GismoInterface,flow::Flow{T},body::AbsBodies) where T
+function get_forces!(interface::GismoInterface, flow::Flow{T}, body::AbsBodies, kwargs...) where T
     for (i,b) in enumerate(body.bodies[1:length(interface.quadPoint)]) # only select the active curves
         I = Index(interface.quadPoint,i)
         fi = reduce(hcat,[-1.0*_pforce(b.curve,flow.p,s,zero(T),Val{false}()) for s ∈ interface.quadPoint[i]])
@@ -36,26 +36,26 @@ function getInterfaceForces!(interface::GismoInterface,flow::Flow{T},body::AbsBo
         interface.forces[:,I] .= fi
     end
 end
+
 import ParametricBodies: NurbsCurve, DynamicNurbsBody
-function GismoInterface(; KnotMesh="KnotMesh",ControlPointMesh="ControlPointMesh",
-                          ForceMesh="ForceMesh",dir=nothing,curves=nothing,center=SA[0.,0.])
+function GismoInterface(T=Float64; dir=nothing, curves=nothing, center=SA[0.,0.], kwargs...)
 
     # initilise PreCICE
     PreCICE.initialize()
 
     # get the mesh verticies from the fluid solver
-    (_, knots) = getMeshVertexIDsAndCoordinates(KnotMesh)
+    (_, knots) = getMeshVertexIDsAndCoordinates("KnotMesh")
     knots = knotVectorUnpack(knots)
    
     # get the mesh verticies from the structural solver
-    (ControlPointsID, ControlPoints) = getMeshVertexIDsAndCoordinates(ControlPointMesh)
+    (ControlPointsID, ControlPoints) = getMeshVertexIDsAndCoordinates("ControlPointMesh")
     ControlPointsID = Array{Int32}(ControlPointsID)
     ControlPoints = getControlPoints(ControlPoints, knots)
     deformation = copy(ControlPoints)
     isnothing(dir) ? (direction = ones(length(ControlPoints))) : direction = dir
     
     # get the quad points in parameter space
-    (quadPointID, quadPoint) = getMeshVertexIDsAndCoordinates(ForceMesh)
+    (quadPointID, quadPoint) = getMeshVertexIDsAndCoordinates("ForceMesh")
     forces = zeros(reverse(size(quadPoint))...)
     quadPointID = Array{Int32}(quadPointID)
     quadPoint = quadPointUnpack(quadPoint)
@@ -94,7 +94,7 @@ function readData!(interface::GismoInterface)
     interface.deformation .= getDeformation(readData, interface.knots) # repack correctly
 end
 import ParametricBodies
-function update!(interface::GismoInterface, sim::Simulation; kwargs...)
+function update!(interface::GismoInterface, sim::CoupledSimulation; kwargs...)
     # update the geom as this has not been done yet
     for i in 1:interface.N
         new = interface.ControlPoints[i].+interface.deformation[i]

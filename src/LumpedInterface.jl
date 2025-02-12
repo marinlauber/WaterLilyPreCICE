@@ -19,7 +19,7 @@ mutable struct LumpedInterface <: AbstractInterface
 end
 export LumpedInterface
 
-function LumpedInterface(;fname="../Solid/geom.inp",T=Float64,func=(i,t)->0,prob=nothing)
+function LumpedInterface(T=Float64;fname="../Solid/geom.inp", func=(i,t)->0, prob=nothing, kwargs...)
 
     # keyword aguments might be specified
     if size(ARGS, 1) < 1
