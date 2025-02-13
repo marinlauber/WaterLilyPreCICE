@@ -26,6 +26,7 @@ Base.getproperty(f::CoupledSimulation, s::Symbol) = s in propertynames(f) ? getf
 
 function CoupledSimulation(args...; T=Float64, mem=Array, interface=:CalculiXInterface, # WL specific
                            fname="geom.inp", map=(x,t)->x, scale=1.f0, # CalculiX specific
+                           boundary=true, thk=0f0,
                            dir=nothing, curves=nothing, center=SA[0.,0.], # Gismo specific
                            func=(i,t)->0, prob=nothing,                   # Lumped specific
                            kwargs...) # args and kwargs are passed to Simulation
@@ -33,9 +34,7 @@ function CoupledSimulation(args...; T=Float64, mem=Array, interface=:CalculiXInt
     # check that the interface exists
     @assert interface in [:GismoInterface,:CalculiXInterface,
                           :LumpedInterface] "The interface specified does not exist"
-    if interface==:CalculiXInterface
-        @assert length(args[1])==3 "Pure 2D simulations are not support for CalculiX coupling, please make it 3D (Nx,Ny)->(Nx,Ny,1)"
-    elseif interface==:GismoInterface
+    if interface==:GismoInterface
         @assert length(args[1])==2 "3D simulations are not support for Gismo coupling"
     end
    
@@ -50,7 +49,7 @@ function CoupledSimulation(args...; T=Float64, mem=Array, interface=:CalculiXInt
     PreCICE.createParticipant("WaterLily", configFileName, 0, 1)
 
     # generate the coupling interface from the coupling partner
-    int, body = eval(interface)(T; fname, map ,scale, dir, curves, center, func, prob)
+    int, body = eval(interface)(T; fname, map ,scale, dir, curves, center, func, prob, boundary, thk)
 
     # the simulation
     sim = Simulation(args...; mem, T, body, kwargs...)
@@ -78,7 +77,7 @@ readData!(sim::CoupledSimulation) = readData!(sim.int, sim.sim, sim.store)
 function readData!(interface::AbstractInterface,sim::Simulation,store::Store)
     # set time step
     dt_precice = PreCICE.getMaxTimeStepSize()
-    interface.dt[end] = dt_precice # min(sim.flow.Δt[end]*sim.U/sim.L, dt_precice) # min physical time step
+    interface.dt[end] = min(sim.flow.Δt[end]*sim.U/sim.L, dt_precice) # min physical time step
     sim.flow.Δt[end] = interface.dt[end]*sim.L/sim.U # numerical time step
 
     if PreCICE.requiresWritingCheckpoint()

@@ -16,10 +16,10 @@ struct CalculiXInterface <: AbstractInterface
     dt::Vector{Float64}
 end
 
-function CalculiXInterface(T=Float64; fname="geom.inp", map=(x,t)->x, scale=1.f0, kwargs...)  
+function CalculiXInterface(T=Float64; fname="geom.inp", map=(x,t)->x, scale=1.f0, boundary=true, thk=0, kwargs...)  
     # construct the body
     #@TODO this is just to get the connectivity in the end...
-    body = MeshBody(fname ; map, scale, T)
+    body = MeshBody(fname ; map, scale, boundary, thk, T)
 
     # get nodes and elements IDS from precice
     numberOfVertices, dimensions = length(body.mesh.position), 3

@@ -140,15 +140,23 @@ outside(x::SVector,bbox::Rect) = !(all(bbox.origin .≤ x) && all(x .≤ bbox.or
 dist(x::SVector,bbox::Rect) = √sum(abs2,x.-bbox.origin-0.5bbox.widths) # 1.707 ns (0 allocations: 0 bytes)
 
 WaterLily.sdf(body::MeshBody,x,t;kwargs...) = measure(body,x,t;kwargs...)[1]
-# overload measure
-function WaterLily.measure(body::MeshBody,x,t,;kwargs...)
-    # eval d=map(x,t)-x, and n̂
-    ξ = body.map(x,t)
-    #  if we are outside of the bouding box, we can measure approx
-    outside(ξ,body.bbox) && (d=dist(ξ,body.bbox); return (body.boundary ? d : abs(d)-body.half_thk,zero(x),zero(x)))
+"""
+    measure(body::MeshBody,x,t;kwargs...)
+
+    Measures a mesh body at point `x` and time `t`.
+    If a mapping has been specified, the point `x` is first map to the new location `ξ`, and the mesh is measured there.
+    We use a large bounding box around the mesh to avoid measuring  far away, where the actual distance doesn't matter as
+    long as d>>O(1), this means that outside the bounding box, we return the distance of the bbox edges to the geom (d=8).
+    If the mesh is not a boundary, we need to adjust the distance by the half thickness of the body.
+"""
+function WaterLily.measure(body::MeshBody,x::SVector{D},t,;kwargs...) where D
+    # eval d=map(x,t)-x | if ξ is 2D, we need to make it 3D
+    ξ = body.map(x,t); D==2 && (ξ=SVector{3}(ξ[1],ξ[2],0))
+    #  if we are outside of the bounding box, we don't even to measure
+    outside(ξ,body.bbox) && return (max(8,2body.half_thk),zero(x),zero(x)) # we don't need to worry if the geom is a boundary or not
     d,n = measure(body.mesh,ξ,t;kwargs...)
     !body.boundary && (d = abs(d)-body.half_thk) # if the mesh is not a boundary, we need to adjust the distance
-
+    D==2 && (n=SVector{D}(n[1],n[2]); n=n/√sum(abs2,n))
     # The velocity depends on the material change of ξ=m(x,t):
     #   Dm/Dt=0 → ṁ + (dm/dx)ẋ = 0 ∴  ẋ =-(dm/dx)\ṁ
     J = ForwardDiff.jacobian(x->body.map(x,t), x)
@@ -198,7 +206,12 @@ function get_p(tri::GeometryBasics.Ngon{3},p,δ)
     c=center(tri);n=normal(tri);ar=area(tri);
     ar.*n.*interp(c.+1.5 .+ δ.*n, p)
 end
-forces(a::GeometryBasics.Mesh, flow::Flow, δ=2) = map(T->get_p(T,flow.p,δ), a)
+function get_p_2D(tri::GeometryBasics.Ngon{3},p,δ)
+    c=center(tri)[1:2];n=normal(tri)[1:2];ar=area(tri);
+    ar.*n.*interp(c.+1.5 .+ δ.*n, p)
+end
+forces(a::GeometryBasics.Mesh, flow::Flow{3}, δ=2) = map(T->get_p(T,flow.p,δ), a)
+forces(a::GeometryBasics.Mesh, flow::Flow{2}, δ=2) = map(T->get_p_2D(T,flow.p,δ), a)
 forces(body::MeshBody ,b::Flow, δ=2) = forces(body.mesh, b, δ)
 
 using Printf: @sprintf
