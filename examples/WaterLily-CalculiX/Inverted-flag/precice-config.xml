@@ -19,18 +19,10 @@
     <use-data name="Forces"/>
   </mesh>
 
-  <mesh name="Fluid-Mesh" dimensions="3">
-    <use-data name="Displacements"/>
-    <use-data name="Forces"/>
-  </mesh>
-
   <participant name="WaterLily">
-    <provide-mesh name="Fluid-Mesh" />
     <receive-mesh name="Solid-Mesh" from="Calculix" />
-    <write-data name="Forces" mesh="Fluid-Mesh" />
-    <read-data name="Displacements" mesh="Fluid-Mesh" />
-    <mapping:nearest-neighbor direction="write" from="Fluid-Mesh" to="Solid-Mesh" constraint="conservative" />
-    <mapping:nearest-neighbor direction="read" from="Solid-Mesh" to="Fluid-Mesh" constraint="conservative" />
+    <write-data name="Forces" mesh="Solid-Mesh" />
+    <read-data name="Displacements" mesh="Solid-Mesh" />
   </participant>
 
   <participant name="Calculix">

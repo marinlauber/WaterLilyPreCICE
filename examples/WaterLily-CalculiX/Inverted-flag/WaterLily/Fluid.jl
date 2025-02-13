@@ -16,16 +16,16 @@ custom_attrib = Dict(
 
 # Simulation parameters and mapping
 L,Re,U = 2^6,250,1
-map(x,t) = x.-SA[2L,2L]
 
 # construct the simulation
-sim = CoupledSimulation((8L,4L),(U,0),L;U,ν=U*L/Re,map,
-                        fname="../CalculiX/geom.inp",scale=1.f0,
+sim = CoupledSimulation((8L,4L),(U,0),L;U,ν=U*L/Re,
+                        surface_mesh="../CalculiX/geom.inp",scale=1.f0,center=SA[2L,2L,0],
                         boundary=false,thk=4,ϵ=1) # this one is the centerline, not the boundary
 
 # writer for the sim
 wr = vtkWriter("Inverted-flag"; attrib=custom_attrib)
 
+# run
 while PreCICE.isCouplingOngoing()
 
     # read the data from the other participant
@@ -33,6 +33,9 @@ while PreCICE.isCouplingOngoing()
 
     # update the this participant
     sim_step!(sim)
+    @show size(sim.int.forces),sim_time(sim)
+    sim.int.forces .= 0
+    sim.int.forces[:,2] .= -5.0
 
     # write data to the other participant
     writeData!(sim)
@@ -40,7 +43,7 @@ while PreCICE.isCouplingOngoing()
     # if we have converged, save if required
     if PreCICE.isTimeWindowComplete()
         # save the data
-        mod(length(sim.flow.Δt),5)==0 && write!(wr, sim)
+        mod(length(sim.flow.Δt),10)==0 && write!(wr, sim)
     end
 end
 close(wr)

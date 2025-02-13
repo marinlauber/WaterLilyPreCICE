@@ -16,19 +16,39 @@ struct CalculiXInterface <: AbstractInterface
     dt::Vector{Float64}
 end
 
-function CalculiXInterface(T=Float64; fname="geom.inp", map=(x,t)->x, scale=1.f0, boundary=true, thk=0, kwargs...)  
+function CalculiXInterface(T=Float64; fname="geom.inp", center=0, scale=1.f0, boundary=true, thk=0, kwargs...)  
     # construct the body
     #@TODO this is just to get the connectivity in the end...
-    body = MeshBody(fname ; map, scale, boundary, thk, T)
+    # body = MeshBody(fname ; map, scale, boundary, thk, T)
 
-    # get nodes and elements IDS from precice
-    numberOfVertices, dimensions = length(body.mesh.position), 3
-    vertices = Array{Float64,2}(undef, numberOfVertices, dimensions)
-    for i in 1:numberOfVertices
-        vertices[i,:] .= body.mesh.position[i].data./scale # we need to have the same scale as in CalculiX
-    end
-    ControlPointsID = PreCICE.setMeshVertices("Fluid-Mesh", vertices)
+    # # get nodes and elements IDS from precice, here we use the unscaled and unmaped mesh
+    # numberOfVertices, dimensions = length(body.mesh.position), 3
+    # vertices = Array{Float64,2}(undef, numberOfVertices, dimensions)
+    # for i in 1:numberOfVertices
+    #     vertices[i,:] .= body.mesh.position[i].data./scale # we need to have the same scale as in CalculiX
+    # end
+    # ControlPointsID = PreCICE.setMeshVertices("Fluid-Mesh", vertices)
    
+    # load the file
+    mesh,srf_id = load_inp(fname) # can we get rid of this?
+        
+    # initialise PreCICE
+    PreCICE.initialize()
+    
+    # we need to initialize before we can get the mesh points and coordinates
+    (ControlPointsID, ControlPoints) = PreCICE.getMeshVertexIDsAndCoordinates("Solid-Mesh")
+    ControlPointsID = Array{Int32}(ControlPointsID)
+    vertices = Array{T,2}(transpose(reshape(ControlPoints,reverse(size(ControlPoints)))))
+    verts = GeometryBasics.Point3f[]
+    for i in 1:size(vertices,1)
+        # prepare the mesh, here we move it to the center of the domain
+        push!(verts, GeometryBasics.Point3f(vertices[i,:].*scale .+ center))
+    end
+    mesh = GeometryBasics.Mesh(verts,GeometryBasics.faces(mesh))
+    bbox = Rect(mesh.position)
+    bbox = Rect(bbox.origin.-max(4,thk),bbox.widths.+max(8,2thk))
+    body = MeshBody(mesh,deepcopy(mesh),srf_id,(x,t)->x,bbox,T(scale),T(thk/2),boundary)
+
     # storage arrays
     forces = zeros(Float64, size(vertices))
     deformation = zeros(Float64, size(vertices))
@@ -37,7 +57,7 @@ function CalculiXInterface(T=Float64; fname="geom.inp", map=(x,t)->x, scale=1.f0
     map_id = Base.map(((i,F),)->vcat(Base.to_index.(F).data...),enumerate(faces(body.mesh)))
     
     # initilise PreCICE
-    PreCICE.initialize()
+    # PreCICE.initialize()
     dt = PreCICE.getMaxTimeStepSize()
     
     # return coupling interface
@@ -47,7 +67,7 @@ end
 
 function readData!(interface::CalculiXInterface)
     # Read control point displacements
-    interface.deformation .= PreCICE.readData("Fluid-Mesh", "Displacements", 
+    interface.deformation .= PreCICE.readData("Solid-Mesh", "Displacements", 
                                               interface.ControlPointsID, interface.dt[end])
 end
 
@@ -59,6 +79,8 @@ function update!(interface::CalculiXInterface, sim::CoupledSimulation; kwargs...
     end
     # update
     sim.body.mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(sim.body.mesh0))
+    bbox = Rect(points)
+    sim.body.bbox = Rect(bbox.origin.-max(4,2sim.body.half_thk),bbox.widths.+max(8,4sim.body.half_thk))
 end
 
 import WaterLily: interp
@@ -69,7 +91,7 @@ function get_forces!(interface::CalculiXInterface, flow::Flow, body::MeshBody; �
     for (i,id) in body.srfID
         tri = body.mesh[id]
         # map into correct part of the mesh, time does nothing
-        f = dS(tri).*interp(body.map(center(tri).+1.5 .+ δ.*normal(tri),t),flow.p)
+        f = 0.0*get_p(tri,flow.p,δ)
         interface.forces[interface.map_id[id],:] .+= transpose(f)./3 # add all the contribution from the faces to the nodes
     end
 end
@@ -77,5 +99,5 @@ end
 function writeData!(interface::CalculiXInterface)
     # write the force at the integration points
     #@TODO: permutedims might not be necessary
-    PreCICE.writeData("Fluid-Mesh", "Forces", interface.ControlPointsID, interface.forces)
+    PreCICE.writeData("Solid-Mesh", "Forces", interface.ControlPointsID, interface.forces)
 end

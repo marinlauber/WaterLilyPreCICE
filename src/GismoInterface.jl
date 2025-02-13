@@ -38,7 +38,7 @@ function get_forces!(interface::GismoInterface, flow::Flow{T}, body::AbsBodies, 
 end
 
 import ParametricBodies: NurbsCurve, DynamicNurbsBody
-function GismoInterface(T=Float64; dir=nothing, curves=nothing, center=SA[0.,0.], kwargs...)
+function GismoInterface(T=Float64; dir=nothing, curves=nothing, center=0, kwargs...)
 
     # initilise PreCICE
     PreCICE.initialize()

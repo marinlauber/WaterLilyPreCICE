@@ -14,8 +14,7 @@ export AbstractInterface
 # include helpers
 include("utils.jl")
 
-"""
-"""
+# structure for coupled simulation
 mutable struct CoupledSimulation <: AbstractSimulation
     sim :: Simulation
     int :: AbstractInterface
@@ -24,11 +23,36 @@ end
 # overlead properties
 Base.getproperty(f::CoupledSimulation, s::Symbol) = s in propertynames(f) ? getfield(f, s) : getfield(f.sim, s)
 
+
+"""
+    CoupledSimulation((WaterLily.Simulation inputs)...;
+                      interface=:CalculiXInterface,
+                      surface_mesh="geom.inp", scale=1.f0,
+                      boundary=true, thickness=0f0, center=0.0,
+                      curve_dir=nothing, passive_bodies=nothing,
+                      func=(i,t)->0, prob=nothing)
+
+Constructor for a WaterLily.Simulation that uses PreCICE for coupling with CalculiX or G+Smo:
+    - `interface`: Interface to use, either `:CalculiXInterface`, `:GismoInterface`, or `:LumpedInterface`.
+                default is :CalculiXInterface.
+    - `surface_mesh`: Path to the surface mesh file (not used for :GismoInterface).
+    - `scale`: Scaling factor for the mesh (not used for :GismoInterface).
+    - `boundary`: Is the mesh provided the boundary of the solid (default is true)
+    - `thickness`: Thickness of the solid (default is 0, boundary must be set 
+                   to false for this to take effects)
+    - `center`: Center of the solid (default is 0, can be used instead of map(x,t) 
+                to move the structure in the domain)
+    - `curve_dir`: Direction of the curve for the Gismo interface (default is nothing)
+    - `passive_bodies`: Passive bodies to add to the interface, they are immersed,
+                        but no FSI occurs for those
+    - `func`: Function to apply to the interface, default is no function (only used for :LumpedInterface)
+    - `prob`: Problem to solve, default is nothing (only used for :LumpedInterface)
+"""
 function CoupledSimulation(args...; T=Float64, mem=Array, interface=:CalculiXInterface, # WL specific
-                           fname="geom.inp", map=(x,t)->x, scale=1.f0, # CalculiX specific
-                           boundary=true, thk=0f0,
-                           dir=nothing, curves=nothing, center=SA[0.,0.], # Gismo specific
-                           func=(i,t)->0, prob=nothing,                   # Lumped specific
+                           surface_mesh="geom.inp", scale=1.f0, # CalculiX specific
+                           boundary=true, thickness=0f0, center=0.0, 
+                           curve_dir=nothing, passive_bodies=nothing, # Gismo specific
+                           func=(i,t)->0, prob=nothing, # Lumped specific
                            kwargs...) # args and kwargs are passed to Simulation
 
     # check that the interface exists
@@ -36,6 +60,9 @@ function CoupledSimulation(args...; T=Float64, mem=Array, interface=:CalculiXInt
                           :LumpedInterface] "The interface specified does not exist"
     if interface==:GismoInterface
         @assert length(args[1])==2 "3D simulations are not support for Gismo coupling"
+    elseif interface==:CalculiXInterface
+        length(args[1])==2 && @warn("\nThe CalculiX interface assumes that 2D simulation happen in the x-y plane and that\n"*
+                                    "the z coordinate is zero. If this is not the case, the interface will not work as expected.")
     end
    
      # keyword aguments might be specified
@@ -49,7 +76,8 @@ function CoupledSimulation(args...; T=Float64, mem=Array, interface=:CalculiXInt
     PreCICE.createParticipant("WaterLily", configFileName, 0, 1)
 
     # generate the coupling interface from the coupling partner
-    int, body = eval(interface)(T; fname, map ,scale, dir, curves, center, func, prob, boundary, thk)
+    int, body = eval(interface)(T; surface_mesh, map ,scale, curve_dir, passive_bodies,
+                                center, func, prob, boundary, thickness)
 
     # the simulation
     sim = Simulation(args...; mem, T, body, kwargs...)

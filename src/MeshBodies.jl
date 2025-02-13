@@ -202,16 +202,15 @@ volume(a::GeometryBasics.Mesh) = mapreduce(T->center(T).*dS(T),+,a)
 volume(body::MeshBody) = volume(body.mesh)
 
 import WaterLily: interp
-function get_p(tri::GeometryBasics.Ngon{3},p,δ)
+function get_p(tri::GeometryBasics.Ngon{3},p::AbstractArray{T,3},δ) where T
     c=center(tri);n=normal(tri);ar=area(tri);
     ar.*n.*interp(c.+1.5 .+ δ.*n, p)
 end
-function get_p_2D(tri::GeometryBasics.Ngon{3},p,δ)
+function get_p(tri::GeometryBasics.Ngon{3},p::AbstractArray{T,2},δ) where T
     c=center(tri)[1:2];n=normal(tri)[1:2];ar=area(tri);
     ar.*n.*interp(c.+1.5 .+ δ.*n, p)
 end
-forces(a::GeometryBasics.Mesh, flow::Flow{3}, δ=2) = map(T->get_p(T,flow.p,δ), a)
-forces(a::GeometryBasics.Mesh, flow::Flow{2}, δ=2) = map(T->get_p_2D(T,flow.p,δ), a)
+forces(a::GeometryBasics.Mesh, flow::Flow, δ=2) = map(T->get_p(T,flow.p,δ), a)
 forces(body::MeshBody ,b::Flow, δ=2) = forces(body.mesh, b, δ)
 
 using Printf: @sprintf

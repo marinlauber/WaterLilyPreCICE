@@ -47,15 +47,6 @@ function LumpedInterface(T=Float64;fname="../Solid/geom.inp", func=(i,t)->0, pro
     end
     mesh = GeometryBasics.Mesh(verts,GeometryBasics.faces(mesh))
 
-    # # get nodes and elements IDS from preCICE
-    numberOfVertices, dimensions = length(mesh.position), 3
-
-    # integration points
-    quadPoints = Array{T,2}(undef, length(mesh), dimensions)
-    for i in 1:numberOfVertices
-        quadPoints[i,:] .= center(mesh[i])
-    end
-
     # mapping from center to nodes, needed for the forces
     forces = zeros(T, size(ControlPoints))
     map_id = map(((i,F),)->vcat(Base.to_index.(F).data...),enumerate(faces(mesh)))
