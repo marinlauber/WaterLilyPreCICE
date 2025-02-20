@@ -2,7 +2,7 @@ using PreCICE
 using StaticArrays
 
 # can be cleaner
-include("MeshBodies.jl")
+# include("MeshBodies.jl")
 include("KDTree.jl")
 
 """
@@ -16,10 +16,10 @@ struct CalculiXInterface <: AbstractInterface
     dt::Vector{Float64}
 end
 
-function CalculiXInterface(T=Float64; fname="geom.inp", center=0, scale=1.f0, boundary=true, thk=0, kwargs...)  
+function CalculiXInterface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, boundary=true, thk=0, kwargs...)  
     # construct the body
     #@TODO this is just to get the connectivity in the end...
-    # body = MeshBody(fname ; map, scale, boundary, thk, T)
+    # body = MeshBody(surface_mesh ; map, scale, boundary, thk, T)
 
     # # get nodes and elements IDS from precice, here we use the unscaled and unmaped mesh
     # numberOfVertices, dimensions = length(body.mesh.position), 3
@@ -30,7 +30,7 @@ function CalculiXInterface(T=Float64; fname="geom.inp", center=0, scale=1.f0, bo
     # ControlPointsID = PreCICE.setMeshVertices("Fluid-Mesh", vertices)
    
     # load the file
-    mesh,srf_id = load_inp(fname) # can we get rid of this?
+    mesh,srf_id = load_inp(surface_mesh) # can we get rid of this?
         
     # initialise PreCICE
     PreCICE.initialize()
@@ -74,7 +74,7 @@ end
 function update!(interface::CalculiXInterface, sim::CoupledSimulation; kwargs...)
     # update mesh position, measure is done elsewhere
     points = Point3f[]
-    for (i,pnt) in enumerate(sim.store.body.mesh.position)
+    for (i,pnt) in enumerate(sim.store.b.mesh.position)
         push!(points, Point3f(SA[pnt.data...] .+ sim.body.scale.*interface.deformation[i,:]))
     end
     # update
@@ -91,7 +91,7 @@ function get_forces!(interface::CalculiXInterface, flow::Flow, body::MeshBody; �
     for (i,id) in body.srfID
         tri = body.mesh[id]
         # map into correct part of the mesh, time does nothing
-        f = 0.0*get_p(tri,flow.p,δ)
+        f = get_p(tri,flow.p,δ)
         interface.forces[interface.map_id[id],:] .+= transpose(f)./3 # add all the contribution from the faces to the nodes
     end
 end

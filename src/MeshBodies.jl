@@ -24,7 +24,7 @@ function MeshBody(fname::String;scale=1.0,boundary=true,thk=0f0,T=Float32)
     mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(tmp))
     bbox = Rect(mesh.position)
     bbox = Rect(bbox.origin.-max(4,thk),bbox.widths.+max(8,2thk))
-    return MeshBody(mesh,srf_id,map,bbox,T(scale),T(thk/2),boundary)
+    return MeshBody(mesh,srf_id,(x,t)->x,bbox,T(scale),T(thk/2),boundary)
 end
 Base.copy(b::MeshBody) = (mesh=GeometryBasics.Mesh(b.mesh.position,GeometryBasics.faces(b.mesh));
                           MeshBody(mesh,b.srfID,b.map,Rect(b.bbox),b.scale,b.half_thk,b.boundary))

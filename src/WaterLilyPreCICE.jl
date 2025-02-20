@@ -48,7 +48,7 @@ Constructor for a WaterLily.Simulation that uses PreCICE for coupling with Calcu
     - `func`: Function to apply to the interface, default is no function (only used for :LumpedInterface)
     - `prob`: Problem to solve, default is nothing (only used for :LumpedInterface)
 """
-function CoupledSimulation(args...; T=Float64, mem=Array, interface=:CalculiXInterface, # WL specific
+function CoupledSimulation(args...; T=Float64, mem=Array, interface=:Interface, # WL specific
                            surface_mesh="geom.inp", scale=1.f0, # CalculiX specific
                            boundary=true, thickness=0f0, center=0.0, 
                            curve_dir=nothing, passive_bodies=nothing, # Gismo specific
@@ -56,8 +56,8 @@ function CoupledSimulation(args...; T=Float64, mem=Array, interface=:CalculiXInt
                            kwargs...) # args and kwargs are passed to Simulation
 
     # check that the interface exists
-    @assert interface in [:GismoInterface,:CalculiXInterface,
-                          :LumpedInterface] "The interface specified does not exist"
+    @assert interface in [:Interface,:CalculiXInterface,
+                          :GismoInterface,:LumpedInterface] "The interface specified does not exist"
     if interface==:GismoInterface
         @assert length(args[1])==2 "3D simulations are not support for Gismo coupling"
     elseif interface==:CalculiXInterface
@@ -89,7 +89,6 @@ function CoupledSimulation(args...; T=Float64, mem=Array, interface=:CalculiXInt
     CoupledSimulation(sim, int, store)
 end
 
-
 # overload sim_step!
 import WaterLily: sim_step!
 function sim_step!(sim::CoupledSimulation; kwargs...)
@@ -99,6 +98,18 @@ function sim_step!(sim::CoupledSimulation; kwargs...)
     measure!(sim); mom_step!(sim.flow, sim.pois)
     # get forces, this is type-specialized
     get_forces!(sim.int, sim.flow, sim.body; kwargs...)
+end
+
+macro notimplemented(message="not implemented")
+    quote
+        error($esc(message))
+    end
+end
+function update!(::AbstractInterface, args...; kwargs...)
+    @notimplemented "`update!` not implemented for `AbstractInterface`, it must to be (interface) specialized"
+end
+function get_forces!(::AbstractInterface, args...; kwargs...)
+    @notimplemented "`get_forces!` not implemented for `AbstractInterface`, it must to be (interface) specialized"
 end
 
 readData!(sim::CoupledSimulation) = readData!(sim.int, sim.sim, sim.store)
@@ -121,7 +132,7 @@ function writeData!(interface::AbstractInterface,sim::Simulation,store::Store)
     # write the force at the integration points
     writeData!(interface)
 
-    # do the coupling    
+    # do the coupling
     interface.dt[end] = PreCICE.advance(interface.dt[end])
     
     # read checkpoint if required or move on
@@ -131,10 +142,15 @@ function writeData!(interface::AbstractInterface,sim::Simulation,store::Store)
 end
 export CoupledSimulation,readData!,writeData!
 
+# the general interface type
+include("Interface.jl")
+export Interface,MeshBody
+@reexport using GeometryBasics
+
 # CalculiX specific interface functions
 include("CalculiXInterface.jl")
-export CalculiXInterface,MeshBody,Tree,Bbox
-@reexport using GeometryBasics
+export CalculiXInterface,Tree,Bbox
+# @reexport using GeometryBasics
 
 # G+Smo specific interface functions
 include("GismoInterface.jl")
