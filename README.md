@@ -39,13 +39,28 @@ run `Calculix`
 ccx_preCICE -i calculix -bg -precice-participant Calculix
 ```
 
+## General approach
+
+The approach we have to use to couple a structural solver with `WaterLily.jl` using `preCICE` is different from what you would do with classical ALE methods. Since `WaterLily.jl` is an immersed-boundary solver, there is no interface mesh readily available in the fluid solver. We follow two approaches in this package; the first one is to read the mesh as triangulated surfaces and use the `preCICE` adapter to couple this mesh to whatever type of mesh is used in the structural solver. The second approach, which can only be used from `CalculiX` and `G+Smo` coupling is to use `preCICE` to communicate that interface mesh directly from the structural solver to the fluid solver.
+
+### Coupling to another structural solver
+
+
+
 ## Examples
 
-### Rigid Sphere in a flow
+<!-- ### Rigid Sphere in a flow
 
 ...
 
-![](assets/rigid-sphere.gif)
+![](assets/rigid-sphere.gif) -->
+
+
+### Rubber Airfoil in a flow
+
+This does not sound like a good idea, but it can actually help with gust mitigations!
+
+![](assets/rubber-airfoil.gif)
 
 ### Turek-Hron with G+Smo
 

@@ -74,11 +74,11 @@ end
 function update!(interface::CalculiXInterface, sim::CoupledSimulation; kwargs...)
     # update mesh position, measure is done elsewhere
     points = Point3f[]
-    for (i,pnt) in enumerate(sim.body.mesh0.position)
+    for (i,pnt) in enumerate(sim.store.body.mesh.position)
         push!(points, Point3f(SA[pnt.data...] .+ sim.body.scale.*interface.deformation[i,:]))
     end
     # update
-    sim.body.mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(sim.body.mesh0))
+    sim.body.mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(sim.body.mesh))
     bbox = Rect(points)
     sim.body.bbox = Rect(bbox.origin.-max(4,2sim.body.half_thk),bbox.widths.+max(8,4sim.body.half_thk))
 end

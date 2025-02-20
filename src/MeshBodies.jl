@@ -5,7 +5,6 @@ using StaticArrays
 using ForwardDiff
 
 mutable struct MeshBody{T,F<:Function} <: AbstractBody
-    mesh0 :: GeometryBasics.Mesh # initial mesh, default to pointing to mesh
     mesh  :: GeometryBasics.Mesh
     srfID :: Union{Nothing,NTuple}
     map   :: F
@@ -14,7 +13,7 @@ mutable struct MeshBody{T,F<:Function} <: AbstractBody
     half_thk::T #half thickness
     boundary::Bool
 end
-function MeshBody(fname::String;map=(x,t)->x,scale=1.0,boundary=true,thk=0f0,T=Float32)
+function MeshBody(fname::String;scale=1.0,boundary=true,thk=0f0,T=Float32)
     if endswith(fname,".inp")
         tmp,srf_id = load_inp(fname)
     else
@@ -25,10 +24,10 @@ function MeshBody(fname::String;map=(x,t)->x,scale=1.0,boundary=true,thk=0f0,T=F
     mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(tmp))
     bbox = Rect(mesh.position)
     bbox = Rect(bbox.origin.-max(4,thk),bbox.widths.+max(8,2thk))
-    return MeshBody(mesh,mesh,srf_id,map,bbox,T(scale),T(thk/2),boundary)
+    return MeshBody(mesh,srf_id,map,bbox,T(scale),T(thk/2),boundary)
 end
 Base.copy(b::MeshBody) = (mesh=GeometryBasics.Mesh(b.mesh.position,GeometryBasics.faces(b.mesh));
-                          MeshBody(mesh,mesh,b.srfID,b.map,Rect(b.bbox),b.scale,b.half_thk,b.boundary))
+                          MeshBody(mesh,b.srfID,b.map,Rect(b.bbox),b.scale,b.half_thk,b.boundary))
 
 function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
     #INP file format
@@ -163,7 +162,18 @@ function WaterLily.measure(body::MeshBody,x::SVector{D},t,;kwargs...) where D
     dot = ForwardDiff.derivative(t->body.map(x,t), t)
     return (d,n,-J\dot)
 end
-
+function WaterLily.update!(body::MeshBody;update::Function=(x)->x)
+    @assert((hasmethod(update,Tuple{SVector}) && typeof(update(SVector{3}(zeros(3))))==typeof(SVector{3}(zeros(3)))),
+            "`update` must have a method of type ::SVector{3}->::SVector{3}")
+    # update mesh position, measure is done elsewhere
+    points = Point3f[]
+    for (i,pnt) in enumerate(body.mesh.position)
+        push!(points, Point3f(update(SA[pnt.data...])))
+    end
+    body.mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(body.mesh))
+    bbox = Rect(points)
+    body.bbox = Rect(bbox.origin.-max(4,2body.half_thk),bbox.widths.+max(8,4body.half_thk))
+end
 using LinearAlgebra: cross
 """
     normal(tri::GeometryBasics.Ngon{3})
@@ -211,7 +221,7 @@ function get_p(tri::GeometryBasics.Ngon{3},p::AbstractArray{T,2},δ) where T
     ar.*n.*interp(c.+1.5 .+ δ.*n, p)
 end
 forces(a::GeometryBasics.Mesh, flow::Flow, δ=2) = map(T->get_p(T,flow.p,δ), a)
-forces(body::MeshBody ,b::Flow, δ=2) = forces(body.mesh, b, δ)
+forces(body::MeshBody, b::Flow, δ=2) = forces(body.mesh, b, δ)
 
 using Printf: @sprintf
 import WaterLily

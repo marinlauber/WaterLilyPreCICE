@@ -102,26 +102,6 @@ function update!(interface::LumpedInterface)
     end
 end
 
-# value_vector = randn(10)
-# f_fun(t) = t >= 10 ? value_vector[end] : value_vector[Int(floor(t)) + 1]
-# @register_symbolic f_fun(t)
-
-# @mtkmodel FOLExternalFunction begin
-#     @parameters begin
-#         τ = 0.75 # parameters and their values
-#     end
-#     @variables begin
-#         x(t) = 0.0 # dependent variables and their initial conditions
-#         f(t)
-#     end
-#     @equations begin
-#         f ~ f_fun(t)
-#         D(x) ~ (f - x) / τ
-#     end
-# end
-
-# @mtkbuild fol_external_f = FOLExternalFunction()
-
 """
     writeData!(::LumpedInterface)
 
