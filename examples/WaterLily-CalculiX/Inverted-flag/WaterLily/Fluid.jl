@@ -18,7 +18,7 @@ custom_attrib = Dict(
 L,Re,U = 2^6,250,1
 
 # construct the simulation
-sim = CoupledSimulation((8L,4L),(U,0),L;U,ν=U*L/Re,
+sim = CoupledSimulation((8L,4L),(U,0),L;U,ν=U*L/Re, interface=:CalculiXInterface,
                         surface_mesh="../CalculiX/geom.inp",scale=1.f0,center=SA[2L,2L,0],
                         boundary=false,thk=4,ϵ=1) # this one is the centerline, not the boundary
 

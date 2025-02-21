@@ -14,6 +14,15 @@ export AbstractInterface
 # include helpers
 include("utils.jl")
 
+# include mesh bodies
+include("MeshBodies.jl")
+export MeshBody
+@reexport using GeometryBasics
+
+# include the KDTree
+# include("KDTree.jl")
+# export KDTree,Bbox
+
 # structure for coupled simulation
 mutable struct CoupledSimulation <: AbstractSimulation
     sim :: Simulation
@@ -93,7 +102,7 @@ end
 import WaterLily: sim_step!
 function sim_step!(sim::CoupledSimulation; kwargs...)
     # update the this participant this is type-specialized
-    WaterLilyPreCICE.update!(sim.int, sim; kwargs...)
+    update!(sim.int, sim; kwargs...)
     # measure and momentum step
     measure!(sim); mom_step!(sim.flow, sim.pois)
     # get forces, this is type-specialized
@@ -144,13 +153,11 @@ export CoupledSimulation,readData!,writeData!
 
 # the general interface type
 include("Interface.jl")
-export Interface,MeshBody
-@reexport using GeometryBasics
+export Interface
 
 # CalculiX specific interface functions
 include("CalculiXInterface.jl")
-export CalculiXInterface,Tree,Bbox
-# @reexport using GeometryBasics
+export CalculiXInterface
 
 # G+Smo specific interface functions
 include("GismoInterface.jl")

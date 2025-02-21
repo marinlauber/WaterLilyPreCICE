@@ -1,8 +1,4 @@
-using PreCICE
-using StaticArrays
-
-# can be cleaner
-include("MeshBodies.jl")
+# Interface
 
 struct Interface <: AbstractInterface
     ControlPointsID :: AbstractArray
@@ -10,26 +6,30 @@ struct Interface <: AbstractInterface
     deformation     :: AbstractArray
     map_id          :: AbstractVector
     dt              :: Vector{Float64}
+    rw_mesh         :: String
+    read_data       :: String
+    write_data      :: String
 end
 
-function Interface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, boundary=true, thk=0, kwargs...)  
+function Interface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, boundary=true, thk=0, 
+                    rw_mesh="Fluid-Mesh", read_data="Displacements", write_data="Forces", kwargs...)  
     
     # load the file
     mesh,srf_id = load_inp(surface_mesh) # can we get rid of this?
     
     # pass nodes and elements IDS to preCICE, here we use the unscaled and un-maped mesh
     numberOfVertices, dimensions = length(mesh.position), 3
-    vertices = Array{Float64,2}(undef, numberOfVertices, dimensions)
+    vertices = Array{Float64,2}(undef, dimensions, numberOfVertices)
     for i in 1:numberOfVertices
-        vertices[i,:] .= mesh.position[i].data # we need to have the same scale as in CalculiX
+        vertices[:,i] .= mesh.position[i].data # we need to have the same scale as in CalculiX
     end
-    ControlPointsID = PreCICE.setMeshVertices("Fluid-Mesh", vertices)
+    ControlPointsID = PreCICE.setMeshVertices(rw_mesh, reshape(vertices, (:,3)))
 
     # construct the actual mesh now that the mapping has been compuated
     verts = GeometryBasics.Point3f[]
     for i in 1:numberOfVertices
         # prepare the mesh, here we move it to the center of the domain
-        push!(verts, GeometryBasics.Point3f(vertices[i,:].*scale .+ center))
+        push!(verts, GeometryBasics.Point3f(vertices[:,i].*scale .+ center))
     end
     mesh = GeometryBasics.Mesh(verts,GeometryBasics.faces(mesh))
     bbox = Rect(mesh.position)
@@ -37,8 +37,8 @@ function Interface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, bou
     body = MeshBody(mesh,srf_id,(x,t)->x,bbox,T(scale),T(thk/2),boundary)
 
     # storage arrays
-    forces = zeros(Float64, size(vertices))
-    deformation = zeros(Float64, size(vertices))
+    forces = zeros(Float64, numberOfVertices, dimensions)
+    deformation = zeros(Float64, numberOfVertices, dimensions)
 
     # mapping from center to nodes, needed for the forces
     map_id = Base.map(((i,F),)->vcat(Base.to_index.(F).data...),enumerate(faces(body.mesh)))
@@ -48,17 +48,17 @@ function Interface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, bou
     dt = PreCICE.getMaxTimeStepSize()
     
     # return coupling interface
-    interface = Interface(ControlPointsID, forces, deformation, map_id, [dt])
+    interface = Interface(ControlPointsID, forces, deformation, map_id, [dt], rw_mesh, read_data, write_data)
     return interface, body
 end
 
-function readData!(interface::Interface)
+function readData!(interface::S) where S<:Interface
     # Read control point displacements
-    interface.deformation .= PreCICE.readData("Fluid-Mesh", "Displacements", 
+    interface.deformation .= PreCICE.readData(interface.rw_mesh, interface.read_data, 
                                               interface.ControlPointsID, interface.dt[end])
 end
 
-function update!(interface::Interface, sim::CoupledSimulation; kwargs...)
+function update!(interface::S, sim::CoupledSimulation; kwargs...) where S<:Interface
     # update mesh position, measure is done elsewhere
     points = Point3f[]
     for (i,pnt) in enumerate(sim.store.b.mesh.position)
@@ -71,19 +71,19 @@ function update!(interface::Interface, sim::CoupledSimulation; kwargs...)
 end
 
 import WaterLily: interp
-function get_forces!(interface::Interface, flow::Flow, body::MeshBody; δ=1.f0, kwargs...)
+function get_forces!(interface::S, flow::Flow, body::MeshBody; δ=1.f0, kwargs...) where S<:Interface
     t = sum(@views(interface.dt[1:end])) # the time
     interface.forces .= 0 # reset the forces
     # compute nodal forces
-    for (i,id) in body.srfID
+    for id in 1:length(body.mesh)
         tri = body.mesh[id]
         # map into correct part of the mesh, time does nothing
-        f = get_p(tri,flow.p,δ)
-        interface.forces[interface.map_id[id],:] .+= transpose(f)./3 # add all the contribution from the faces to the nodes
+        f = get_p(tri, flow.p, δ)
+        interface.forces[interface.map_id[id],:] .-= transpose(f)./3 # add all the contribution from the faces to the nodes
     end
 end
 
-function writeData!(interface::Interface)
+function writeData!(interface::S) where S<:Interface
     # write the force at the integration points
-    PreCICE.writeData("Fluid-Mesh", "Forces", interface.ControlPointsID, interface.forces)
+    PreCICE.writeData(interface.rw_mesh, interface.write_data, interface.ControlPointsID, interface.forces)
 end

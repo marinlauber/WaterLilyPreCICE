@@ -66,6 +66,8 @@ function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
     push!(tmp,cnt) # push the last element
     # reshape the surface id vector, the first ID resets the count
     srf_id = ntuple(i->srf_id[tmp[i]:tmp[i+1]-1].-srf_id[1].+1,length(tmp)-1)
+    #@TODO: case where there is no surface ID and we pass it a single tuple of all the faces
+    # length(srf_id)==1 && (srf_id = ntuple(i->srf_id[1],length(faces)))
     close(fs) # close file stream
     return Mesh(points, faces), srf_id
 end

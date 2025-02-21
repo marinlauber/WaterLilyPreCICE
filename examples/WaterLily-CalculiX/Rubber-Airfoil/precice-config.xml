@@ -25,6 +25,7 @@
   </mesh>
 
   <participant name="WaterLily">
+    <export:vtp every-n-time-windows="5" directory="vtp/" every-iteration="0"/>
     <provide-mesh name="Fluid-Mesh" />
     <receive-mesh name="Solid-Mesh" from="Calculix" />
     <write-data name="Forces" mesh="Fluid-Mesh" />
@@ -34,6 +35,7 @@
   </participant>
 
   <participant name="Calculix">
+    <export:vtp every-n-time-windows="5" directory="vtp/" every-iteration="0"/>
     <provide-mesh name="Solid-Mesh" />
     <write-data name="Displacements" mesh="Solid-Mesh" />
     <read-data name="Forces" mesh="Solid-Mesh" />
