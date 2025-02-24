@@ -18,7 +18,7 @@ function revert!(s::Store,sim::Simulation)
     sim.body = s.b # nice and simple
 end
 
-# unpack subarray of inceasing values of an hcat
+# unpack subarray of increasing values [0,0.5,1,0,0.33,0.66,1] -> [[0,0.5,1],[0,0.33,0.66,1]]
 function unpack(a)
     tmp=[a[1]]; ks=Vector{Number}[]
     for i ∈ 2:length(a)
