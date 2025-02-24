@@ -1,6 +1,4 @@
-using Test
-using StaticArrays
-using WaterLilyPreCICE
+using Test,WaterLilyPreCICE,StaticArrays
 
 @testset "MeshBodies.jl" begin
     # inside bbox or not

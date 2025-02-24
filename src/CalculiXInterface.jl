@@ -1,20 +1,7 @@
 # CalculiXInterface
 
-
-# struct CalculiXInterface <: AbstractInterface
-#     ControlPointsID::AbstractArray
-#     forces::AbstractArray
-#     deformation::AbstractArray
-#     map_id :: AbstractVector
-#     dt::Vector{Float64}
-# end
-# this is only slighlty different than the classical interface
-# struct CalculiXInterface <: AbstractInterface
-#    a :: AbstractInterface
-# end
-# # overlead properties
-# Base.getproperty(C::CalculiXInterface, s::Symbol) = s in propertynames(C) ? getfield(C, s) : getfield(C.a, s)
-
+# this is a constructor for a the calculix interface, which is the same as the classical interface
+# except that the mesh is read from a CalculiX input file directly, and not from the surface file
 function CalculiXInterface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, boundary=true, thk=0, 
                            rw_mesh="Solid-Mesh", read_data="Displacements", write_data="Forces", kwargs...)  
 
@@ -52,39 +39,3 @@ function CalculiXInterface(T=Float64; surface_mesh="geom.inp", center=0, scale=1
     interface = Interface(ControlPointsID, forces, deformation, map_id, [dt], rw_mesh, read_data, write_data)
     return interface, body
 end
-
-# function readData!(interface::CalculiXInterface)
-#     # Read control point displacements
-#     interface.deformation .= PreCICE.readData("Solid-Mesh", "Displacements", 
-#                                               interface.ControlPointsID, interface.dt[end])
-# end
-
-# function update!(interface::S, sim::CoupledSimulation; kwargs...) where S<:Union{Interface,CalculiXInterface}
-#     # update mesh position, measure is done elsewhere
-#     points = Point3f[]
-#     for (i,pnt) in enumerate(sim.store.b.mesh.position)
-#         push!(points, Point3f(SA[pnt.data...] .+ sim.body.scale.*interface.deformation[i,:]))
-#     end
-#     # update
-#     sim.body.mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(sim.body.mesh))
-#     bbox = Rect(points)
-#     sim.body.bbox = Rect(bbox.origin.-max(4,2sim.body.half_thk),bbox.widths.+max(8,4sim.body.half_thk))
-# end
-
-# import WaterLily: interp
-# function get_forces!(interface::S, flow::Flow, body::MeshBody; δ=1.f0, kwargs...) where S<:Union{Interface,CalculiXInterface}
-#     t = sum(@views(interface.dt[1:end])) # the time
-#     interface.forces .= 0 # reset the forces
-#     # compute nodal forces
-#     for id in 1:length(body.mesh)
-#         tri = body.mesh[id]
-#         # map into correct part of the mesh, time does nothing
-#         f = get_p(tri, flow.p, δ)
-#         interface.forces[interface.map_id[id],:] .+= transpose(f)./3 # add all the contribution from the faces to the nodes
-#     end
-# end
-
-# function writeData!(interface::CalculiXInterface)
-#     # write the force at the integration points
-#     PreCICE.writeData("Solid-Mesh", "Forces", interface.ControlPointsID, interface.forces)
-# end

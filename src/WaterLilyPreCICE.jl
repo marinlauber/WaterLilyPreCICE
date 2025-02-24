@@ -13,6 +13,7 @@ export AbstractInterface
 
 # include helpers
 include("utils.jl")
+export Store,store!,revert!
 
 # include mesh bodies
 include("MeshBodies.jl")
@@ -29,33 +30,33 @@ mutable struct CoupledSimulation <: AbstractSimulation
     int :: AbstractInterface
     store :: Store
 end
-# overlead properties
+# overload properties
 Base.getproperty(f::CoupledSimulation, s::Symbol) = s in propertynames(f) ? getfield(f, s) : getfield(f.sim, s)
-
 
 """
     CoupledSimulation((WaterLily.Simulation inputs)...;
-                      interface=:CalculiXInterface,
+                      interface=:Interface,
                       surface_mesh="geom.inp", scale=1.f0,
                       boundary=true, thickness=0f0, center=0.0,
                       curve_dir=nothing, passive_bodies=nothing,
                       func=(i,t)->0, prob=nothing)
 
 Constructor for a WaterLily.Simulation that uses PreCICE for coupling with CalculiX or G+Smo:
-    - `interface`: Interface to use, either `:CalculiXInterface`, `:GismoInterface`, or `:LumpedInterface`.
-                default is :CalculiXInterface.
-    - `surface_mesh`: Path to the surface mesh file (not used for :GismoInterface).
-    - `scale`: Scaling factor for the mesh (not used for :GismoInterface).
-    - `boundary`: Is the mesh provided the boundary of the solid (default is true)
-    - `thickness`: Thickness of the solid (default is 0, boundary must be set 
-                   to false for this to take effects)
-    - `center`: Center of the solid (default is 0, can be used instead of map(x,t) 
-                to move the structure in the domain)
-    - `curve_dir`: Direction of the curve for the Gismo interface (default is nothing)
+    - `interface`     : Interface to use, either `:Interface, :CalculiXInterface`, `:GismoInterface`, or `:LumpedInterface`.
+                        default is :Interface.
+    - `surface_mesh`  : Path to the surface mesh file (not used for :GismoInterface).
+    - `scale`         : Scaling factor for the mesh (not used for :GismoInterface).
+    - `boundary`      : Is the mesh provided the boundary of the solid (default is true)
+    - `thickness`     : Thickness of the solid (default is 0, boundary must be set 
+                        to false for this to take effects)
+    - `center`        : Center of the solid (default is 0, can be used instead of `map(x,t)`
+                        to move the structure in the domain)
+    - `curve_dir`     : Direction of the curve for the Gismo interface (default is nothing)
     - `passive_bodies`: Passive bodies to add to the interface, they are immersed,
                         but no FSI occurs for those
-    - `func`: Function to apply to the interface, default is no function (only used for :LumpedInterface)
-    - `prob`: Problem to solve, default is nothing (only used for :LumpedInterface)
+    - `func`          : Function to apply to the interface, default is no function 
+                        (only used for :LumpedInterface)
+    - `prob`          : Problem to solve, default is nothing (only used for :LumpedInterface)
 """
 function CoupledSimulation(args...; T=Float64, mem=Array, interface=:Interface, # WL specific
                            surface_mesh="geom.inp", scale=1.f0, # CalculiX specific
@@ -64,7 +65,8 @@ function CoupledSimulation(args...; T=Float64, mem=Array, interface=:Interface, 
                            func=(i,t)->0, prob=nothing, # Lumped specific
                            kwargs...) # args and kwargs are passed to Simulation
 
-    # check that the interface exists
+    # check that the interface is constructed correctly
+    @assert !(:map in keys(kwargs)) "The `map` keyword argument is not allowed in the `CoupledSimulation` constructor"
     @assert interface in [:Interface,:CalculiXInterface,
                           :GismoInterface,:LumpedInterface] "The interface specified does not exist"
     if interface==:GismoInterface
@@ -73,7 +75,7 @@ function CoupledSimulation(args...; T=Float64, mem=Array, interface=:Interface, 
         length(args[1])==2 && @warn("\nThe CalculiX interface assumes that 2D simulation happen in the x-y plane and that\n"*
                                     "the z coordinate is zero. If this is not the case, the interface will not work as expected.")
     end
-   
+
      # keyword aguments might be specified
     if size(ARGS, 1) < 1
         configFileName = "precice-config.xml"
@@ -125,7 +127,7 @@ readData!(sim::CoupledSimulation) = readData!(sim.int, sim.sim, sim.store)
 function readData!(interface::AbstractInterface,sim::Simulation,store::Store)
     # set time step
     dt_precice = PreCICE.getMaxTimeStepSize()
-    interface.dt[end] = min(sim.flow.Δt[end]*sim.U/sim.L, dt_precice) # min physical time step
+    push!(interface.dt, min(sim.flow.Δt[end]*sim.U/sim.L, dt_precice)) # min physical time step
     sim.flow.Δt[end] = interface.dt[end]*sim.L/sim.U # numerical time step
 
     if PreCICE.requiresWritingCheckpoint()
@@ -141,8 +143,8 @@ function writeData!(interface::AbstractInterface,sim::Simulation,store::Store)
     # write the force at the integration points
     writeData!(interface)
 
-    # do the coupling
-    interface.dt[end] = PreCICE.advance(interface.dt[end])
+    # do the coupling @TODO this return zeros, so don;t replace the last dt
+    PreCICE.advance(interface.dt[end])
     
     # read checkpoint if required or move on
     if PreCICE.requiresReadingCheckpoint()

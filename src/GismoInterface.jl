@@ -7,17 +7,17 @@ include("Bodies.jl")
     An structure to hold the coupling data for WaterLily-Gismo coupling
 """
 struct GismoInterface <: AbstractInterface
-    ControlPointsID::AbstractArray
-    ControlPoints::AbstractArray
-    quadPointID::AbstractArray
-    quadPoint::AbstractArray
-    forces::AbstractArray
-    deformation::AbstractArray
-    knots::AbstractArray
-    dt::Vector{Float64}
-    dir::Vector{Int16}
-    N::Int16
-    center::AbstractVector
+    ControlPointsID :: AbstractArray
+    ControlPoints   :: AbstractArray
+    quadPointID     :: AbstractArray
+    quadPoint       :: AbstractArray
+    forces          :: AbstractArray
+    deformation     :: AbstractArray
+    knots           :: AbstractArray
+    dt              :: Vector{Float64}
+    dir             :: Vector{Int16}
+    N               :: Int16
+    center          :: AbstractVector
 end
 
 using ParametricBodies: _pforce, _vforce
