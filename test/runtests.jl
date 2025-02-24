@@ -16,8 +16,8 @@ using WaterLilyPreCICE
     @test WaterLilyPreCICE.dist(SA[1.5,1.5,1.0],rect) == √2.25
     @test WaterLilyPreCICE.dist(SA[1.5,1.5,1.5],rect) == √3.0
     # make a single tri mesh
-    mesh = Mesh(Point{3, Float64}.([[0.,0.,0.],[1.,0.,0.],[1.,1.,0.]]), 
-                TriangleFace{Int}(1, 2, 3))
+    mesh = GeometryBasics.Mesh(Point{3, Float64}.([[0.,0.,0.],[1.,0.,0.],[1.,1.,0.]]), 
+                               TriangleFace{Int}(1, 2, 3))
     # test tri operation
     @test all(WaterLilyPreCICE.locate(mesh[1], SA[0.,0.,0.]) .≈ [0.,0.,0.]) 
     @test all(WaterLilyPreCICE.locate(mesh[1], SA[1.,1.,1.]) .≈ [1.0,1.0,0.0])
