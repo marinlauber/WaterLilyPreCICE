@@ -15,7 +15,7 @@ function Interface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, bou
                     rw_mesh="Fluid-Mesh", read_data="Displacements", write_data="Forces", kwargs...)  
     
     # load the file
-    mesh,srf_id = load_inp(surface_mesh) # can we get rid of this?
+    mesh, srf_id = load_inp(surface_mesh) # can we get rid of this?
     
     # pass nodes and elements IDS to preCICE, here we use the unscaled and un-maped mesh
     numberOfVertices, dimensions = length(mesh.position), 3
@@ -78,7 +78,7 @@ function get_forces!(interface::S, flow::Flow, body::MeshBody; δ=1.f0, kwargs..
     for id in 1:length(body.mesh)
         tri = body.mesh[id]
         # map into correct part of the mesh, time does nothing
-        f = get_p(tri, flow.p, δ)
+        f = get_p(tri, flow.p, δ, Val{body.boundary}())
         interface.forces[interface.map_id[id],:] .-= transpose(f)./3 # add all the contribution from the faces to the nodes
     end
 end

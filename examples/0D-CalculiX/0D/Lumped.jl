@@ -38,7 +38,7 @@ custom = Dict("SRF" =>vtk_srf, "center"=>vtk_center, "normal"=>vtk_normal,
 "dS" => vtk_dS, "u" => vtk_u, "f"=>vtk_f)
 
 # coupling interface
-interface = LumpedInterface(;func=static_inflation)
+interface = LumpedInterface(surface_mesh="../CalculiX/geom.inp", func=static_inflation)
 
 # make the writer
 wr = vtkWriter("LIMO_4"; attrib=custom)

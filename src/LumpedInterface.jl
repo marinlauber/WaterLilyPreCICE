@@ -6,7 +6,7 @@ using OrdinaryDiffEq
 mutable struct LumpedInterface{T} <: AbstractInterface
     mesh0           :: GeometryBasics.Mesh # initial geometry, never changed
     mesh            :: GeometryBasics.Mesh
-    srfID           :: AbstractVector
+    srf_el          :: NTuple
     deformation     :: AbstractArray # might not be needed
     ControlPointsID :: AbstractArray
     forces          :: AbstractArray
@@ -50,17 +50,14 @@ function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)
     # mapping from center to nodes, needed for the forces
     forces = zeros(T, size(ControlPoints))
     map_id = map(((i,F),)->vcat(Base.to_index.(F).data...),enumerate(faces(mesh)))
-
-    # link elements to surface IDs
-    srf_id = mapreduce(((i,ids),)->map(T->(i,T),ids),vcat,enumerate(srf_id))
-
+    
     # generate lumped model, if the 'prob' is not provided, we return a nothing
     integrator = init(prob, Vern7(), reltol=1e-6, abstol=1e-9)
     u₀ = [0.,1.,2.] #deepcopy(integrator.u0)
 
     # return interface
     LumpedInterface(mesh,deepcopy(mesh),srf_id,vertices,ControlPointsID,
-                    forces,func,map_id,T[],T[],T[],integrator,deepcopy(mesh))
+                    forces,func,map_id,T[0],T[0],T[0],integrator,deepcopy(mesh))
 end
 
 # binding 
@@ -75,11 +72,12 @@ Read the coupling data (displacements) and update the mesh position.
 function readData!(interface::LumpedInterface)
     # set time step
     dt_precice = PreCICE.getMaxTimeStepSize()
-    push!(interface.dt, min(0.1, dt_precice)) # min physical time step
+    #@TODO get max timestep from Lumped model
+    push!(interface.dt, min(10, dt_precice)) # min physical time step
 
     if PreCICE.requiresWritingCheckpoint()
         # save the mesh at this step
-        interface.mesh_storage = deepcopy(interface.mesh)
+        interface.mesh_store = deepcopy(interface.mesh)
         # save initial condition of ODE solver
     end
     # Read control point displacements
@@ -94,7 +92,6 @@ Updates the interface conditions (the forces) from the interface function.
 """
 function update!(interface::LumpedInterface)
     # store the volume for flow rate computation
-    t = sum(@views(interface.dt[1:end])) # the time
     Vᵢ = WaterLilyPreCICE.volume(interface.mesh)[1]
     # update the mesh
     points = Point3f[]
@@ -106,14 +103,16 @@ function update!(interface::LumpedInterface)
     push!(interface.Q, -(WaterLilyPreCICE.volume(interface.mesh)[1] .- Vᵢ) / interface.dt[end])
     # update 0D model
     # interface.integrator... = interface.Q # modify flow rate
-    OrdinaryDiffEq.step!(interface.integrator, interface.dt[end], false)
-    # update the pressure
-    # push!(interface.P, interface.integrator.u[1])
-    push!(interface.P, 1.0)
+    # OrdinaryDiffEq.step!(interface.integrator, interface.dt[end], false)
+    # compute forces
+    get_forces!(interface)
+end
+
+function get_forces!(interface::LumpedInterface, t=sum(@views(interface.dt)); kwargs...)
     # compute nodal forces
     interface.forces .= 0 # reset the forces
-    for (i,id) in interface.srfID
-        f = dS(@views(interface.mesh[id])).*interface.func(i,t) #,interface.P,interface.Q)
+    for (i,id) in interface.srf_el
+        f = dS(@views(interface.mesh[id])).*interface.func(i,t,interface)
         interface.forces[interface.map_id[id],:] .+= transpose(f)./3 # add all the contribution from the faces to the nodes
     end
 end
@@ -133,7 +132,7 @@ function writeData!(interface::LumpedInterface)
     # read checkpoint if required or move on
     if PreCICE.requiresReadingCheckpoint()
         # revert the mesh
-        interface.mesh = deepcopy(interface.mesh_storage)
+        interface.mesh = deepcopy(interface.mesh_store)
         # pop the flux and pressures
         pop!(interface.dt); pop!(interface.Q); pop!(interface.P)
         # revert state of ODE solver

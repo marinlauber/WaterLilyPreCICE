@@ -39,7 +39,7 @@ function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
     node_idx = Int[]
     srf_id = Int[]
     tmp = Int[]
-    cnt = 1
+    cnt = 0
 
     # read the first 3 lines if there is the "*heading" keyword
     line = readline(fs)
@@ -49,7 +49,7 @@ function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
     # read the file
     while !eof(fs)
         line = readline(fs)
-        contains(line,"*ELSET, ELSET=") && (push!(tmp,cnt))
+        contains(line,"*ELSET, ELSET=") && (cnt+=1) #(push!(tmp,cnt))
         BlockType, line = parse_blocktype!(BlockType, fs, line)
         if BlockType == Val{:NodeBlock}()
             push!(node_idx, parse(Int,split(line,",")[1])) # keep track of the node index of the inp file
@@ -58,17 +58,14 @@ function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
             nodes = parse.(Int,split(line,",")[2:end])
             push!(faces, TriangleFace{Int}(facetype([findfirst(==(node),node_idx) for node in nodes])...)) # parse the face
         elseif BlockType == Val{:ElSetBlock}()
-            push!(srf_id, parse.(Int,split(line,",")[1])); cnt+=1
+            push!(srf_id, (cnt,parse.(Int,split(line,",")[1]))); #cnt+=1
         else
             continue
         end
     end
-    push!(tmp,cnt) # push the last element
-    # reshape the surface id vector, the first ID resets the count
-    srf_id = ntuple(i->srf_id[tmp[i]:tmp[i+1]-1].-srf_id[1].+1,length(tmp)-1)
-    #@TODO: case where there is no surface ID and we pass it a single tuple of all the faces
-    # length(srf_id)==1 && (srf_id = ntuple(i->srf_id[1],length(faces)))
     close(fs) # close file stream
+    # case where there is no surface ID and we pass it a single tuple of all the faces
+    srf_id = length(tmp)==0 ? ntuple(i->(1,i),length(faces)) : ntuple(i->(tmp[i][1],tmp[i][2]-tmp[1][1]),length(tmp))
     return Mesh(points, faces), srf_id
 end
 function parse_blocktype!(block, io, line)
@@ -214,15 +211,19 @@ volume(a::GeometryBasics.Mesh) = mapreduce(T->center(T).*dS(T),+,a)
 volume(body::MeshBody) = volume(body.mesh)
 
 import WaterLily: interp
-function get_p(tri::GeometryBasics.Ngon{3},p::AbstractArray{T,3},δ) where T
+function get_p(tri::GeometryBasics.Ngon{3},p::AbstractArray{T,3},δ,::Val{true}) where T
     c=center(tri);n=normal(tri);ar=area(tri);
     ar.*n.*interp(c.+1.5 .+ δ.*n, p)
 end
-function get_p(tri::GeometryBasics.Ngon{3},p::AbstractArray{T,2},δ) where T
+function get_p(tri::GeometryBasics.Ngon{3},p::AbstractArray{T,3},δ,::Val{false}) where T
+    c=center(tri);n=normal(tri);ar=area(tri);
+    ar.*n.*(interp(c.+1.5 .+ δ.*n, p) .- interp(c.+1.5 .- δ.*n, p))
+end
+function get_p(tri::GeometryBasics.Ngon{3},p::AbstractArray{T,2},δ,::Val{true}) where T
     c=center(tri)[1:2];n=normal(tri)[1:2];ar=area(tri);
     ar.*n.*interp(c.+1.5 .+ δ.*n, p)
 end
-forces(a::GeometryBasics.Mesh, flow::Flow, δ=2) = map(T->get_p(T,flow.p,δ), a)
+forces(a::GeometryBasics.Mesh, flow::Flow, δ=2) = map(T->get_p(T, flow.p, δ, Val{a.boundary}()), a)
 forces(body::MeshBody, b::Flow, δ=2) = forces(body.mesh, b, δ)
 
 using Printf: @sprintf

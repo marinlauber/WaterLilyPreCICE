@@ -25,7 +25,7 @@ let
         readData!(sim)
 
         # update the this participant and scale forces
-        sim_step!(sim); sim.int.forces .*= 4/sim.L^2
+        sim_step!(sim); sim.int.forces ./= sim.L
        
         # write data to the other participant
         writeData!(sim)
