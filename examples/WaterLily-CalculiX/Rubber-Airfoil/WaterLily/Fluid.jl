@@ -12,7 +12,7 @@ custom_attrib = Dict("u" => vtk_velocity,
 # make the sim
 L,Re,U = 64,1000,1
 sim = CoupledSimulation((3L,2L,L÷2), (U,0,0), L; ν=U*L/Re, perdir=(3,),
-                         interface=:Interface,surface_mesh=joinpath(@__DIR__,"../CalculiX/surface.inp"),
+                         surface_mesh=joinpath(@__DIR__,"../CalculiX/surface.inp"),
                          scale=L,center=SA[L/2,L,0])
 
 # make the paraview writer

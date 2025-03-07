@@ -33,6 +33,11 @@ function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)
     
     # load the file
     mesh,srf_id = load_inp(surface_mesh) # can we get rid of this?
+
+    # check if we need to initialize the data
+    if PreCICE.requiresInitialData()
+        @assert true "this is not true"
+    end
         
     # initialise PreCICE
     PreCICE.initialize()
@@ -100,7 +105,7 @@ function update!(interface::LumpedInterface)
     end
     interface.mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(interface.mesh0))
     # update flow rate @TODO, can we do that on the displacements directly?
-    push!(interface.Q, -(WaterLilyPreCICE.volume(interface.mesh)[1] .- Vᵢ) / interface.dt[end])
+    push!(interface.Q, (Vᵢ-WaterLilyPreCICE.volume(interface.mesh)[1]) / interface.dt[end])
     # update 0D model
     # interface.integrator... = interface.Q # modify flow rate
     # OrdinaryDiffEq.step!(interface.integrator, interface.dt[end], false)

@@ -6,7 +6,5 @@ participants:
           patch: interface
           write-data: [Displacements]
           read-data: [Forces]
-        # - faces-mesh: Solid-Faces
-          # patch: interface
 
 precice-config-file: ../precice-config.xml

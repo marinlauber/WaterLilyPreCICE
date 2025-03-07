@@ -2,7 +2,8 @@ using WaterLilyPreCICE,StaticArrays,WriteVTK
 
 function make_sphere(;L=32,Re=250,U=1,mem=Array)
     # make the body from the stl mesh
-    body = MeshBody(joinpath(@__DIR__,"../meshes/sphere.stl");scale=L/2)
+    body = MeshBody(joinpath(@__DIR__,"../meshes/sphere.stl");scale=L/2,
+                    map=(x,t)->x.+L/2)
     # generate sim
     Simulation((2L,L,L), (U,0,0), L; ν=U*L/Re, body, mem)
 end
@@ -17,9 +18,7 @@ custom_attrib = Dict("u" => velocity, "p" => pressure, "d" => _body, "v" => _vbo
 
 # make the sim
 sim = make_sphere(L=64)
-# move to the center of the domain
-WaterLily.update!(sim.body,update=(x)->x.+sim.L/2)
-measure!(sim)
+
 # make the paraview writer
 wr = vtkWriter("STL_mesh_test";attrib=custom_attrib)
 # duration and write steps
@@ -27,7 +26,11 @@ t₀,duration,step = 0.,10.0,0.1
 # run the sim
 @time for tᵢ in range(t₀,t₀+duration;step)
     # update until time tᵢ in the background
-    sim_step!(sim,tᵢ;remeasure=false)
+    # sim_step!(sim,tᵢ;remeasure=false)
+    while sim_time(sim) < tᵢ
+        WaterLilyPreCICE.update!(sim.body,sum(sim.flow.Δt),sim.flow.Δt[end])
+        sim_step!(sim; remeasure=true)
+    end
     write!(wr, sim)
     fm = 2sum(WaterLilyPreCICE.forces(sim.body, sim.flow))/(sim.L/2)^2
     println("Surface pressure force: ", round.(fm,digits=4))

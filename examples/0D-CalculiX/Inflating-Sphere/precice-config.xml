@@ -33,20 +33,22 @@
 
   <m2n:sockets acceptor="LPM" connector="Calculix" exchange-directory=".."/>
 
-  <!-- <coupling-scheme:serial-explicit>
-    <participants first="Calculix" second="LPM"/>
-    <max-time value="50.0" />
-    <time-window-size value="-1" method="first-participant"/>
-    <exchange data="Displacements" mesh="Solid-Nodes" from="Calculix" to="LPM"/>
-    <exchange data="Forces" mesh="Solid-Nodes" from="LPM" to="Calculix"/>
-  </coupling-scheme:serial-explicit> -->
+  <coupling-scheme:serial-explicit>
+    <participants first="LPM" second="Calculix"/>
+    <max-time value="1.0" />
+    <time-window-size value="0.01"/>
+    <!-- <time-window-size value="-1" method="first-participant"/> -->
+    <exchange data="Displacements" mesh="Solid-Nodes" from="Calculix" to="LPM" initialize="false"/>
+    <exchange data="Forces" mesh="Solid-Nodes" from="LPM" to="Calculix" initialize="false"/>
+  </coupling-scheme:serial-explicit>
 
-  <coupling-scheme:parallel-implicit>
+  <!-- <coupling-scheme:parallel-implicit>
     <participants first="Calculix" second="LPM"/>
-    <max-time value="10.0" />
-    <time-window-size value="0.1"/>
+    <max-time value="1.0" />
+    <time-window-size value="0.01"/>
     <max-iterations value="50"/>
-    <exchange data="Displacements" mesh="Solid-Nodes" from="Calculix" to="LPM"/>
+    <time-window-size value="-1" method="first-participant"/>
+    <exchange data="Displacements" mesh="Solid-Nodes" from="Calculix" to="LPM" ini/>
     <exchange data="Forces" mesh="Solid-Nodes" from="LPM" to="Calculix"/>
     <relative-convergence-measure limit="1e-4" data="Displacements" mesh="Solid-Nodes"/>
     <relative-convergence-measure limit="1e-3" data="Forces" mesh="Solid-Nodes"/>
@@ -59,5 +61,6 @@
       <max-used-iterations value="50"/>
       <time-windows-reused value="10"/>
     </acceleration:IQN-ILS>
-  </coupling-scheme:parallel-implicit>
+  </coupling-scheme:parallel-implicit> -->
+  
 </precice-configuration>

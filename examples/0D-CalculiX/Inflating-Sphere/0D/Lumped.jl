@@ -2,7 +2,7 @@ using WaterLilyPreCICE,WriteVTK,StaticArrays,Interpolations
 using Plots
 
 # constant pressure, as in `Brown et al. 2024 CMAME 421, https://doi.org/10.1016/j.cma.2024.116764`
-function constant_current(i,t,interface;p₀=100,Rₕ=0.0)
+function constant_current(i,t,interface;p₀=1e-8,Rₕ=0.0)
     pᵢₙ = p₀ + interface.Q[end]*Rₕ # constant current
 end
 
@@ -16,7 +16,6 @@ custom = Dict("u" => vtk_u, "f"=>vtk_f)
 
 # coupling interface
 interface = LumpedInterface(surface_mesh="../CalculiX/geom.inp", func=constant_current)
-WaterLilyPreCICE.get_forces!(interface)
 
 # make the writer
 wr = vtkWriter("Sphere"; attrib=custom)
@@ -39,9 +38,11 @@ while PreCICE.isCouplingOngoing()
         # save the data
         length(interface.dt)%1==0 && write!(wr,interface)
         push!(v, WaterLilyPreCICE.volume(interface.mesh)[1])
-        @show length(interface.P)
     end
 end
+@show interface.P
+@show interface.Q
+@show v
 close(wr)
 plot(interface.P[2:end],v); savefig("pressure-volume.png")
 PreCICE.finalize()

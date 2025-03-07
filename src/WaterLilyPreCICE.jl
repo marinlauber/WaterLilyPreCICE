@@ -122,6 +122,9 @@ end
 function get_forces!(::AbstractInterface, args...; kwargs...)
     @notimplemented "`get_forces!` not implemented for `AbstractInterface`, it must to be (interface) specialized"
 end
+function InitializeData!(::AbstractInterface, args...; kwargs...)
+    @notimplemented "`InitializeData!` not implemented for `AbstractInterface`, it must to be (interface) specialized"
+end
 
 readData!(sim::CoupledSimulation) = readData!(sim.int, sim.sim, sim.store)
 function readData!(interface::AbstractInterface,sim::Simulation,store::Store)
@@ -151,7 +154,7 @@ function writeData!(interface::AbstractInterface,sim::Simulation,store::Store)
         revert!(store,sim)
     end
 end
-export CoupledSimulation,readData!,writeData!
+export CoupledSimulation,readData!,writeData!,InitializeData!
 
 # the general interface type
 include("Interface.jl")

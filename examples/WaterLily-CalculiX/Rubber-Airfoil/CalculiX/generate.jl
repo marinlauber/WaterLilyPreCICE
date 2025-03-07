@@ -17,7 +17,7 @@ println(f, "SetFactory(\"OpenCASCADE\");")
 for (i,pts) in enumerate(points)
     x,y,z = pts
     i ∈ [1,N+1] && (y = sign(y)*0.005; println("Point($i) = {$x, $y, $z};"))
-    x,y,z = rotate_z(SA[x,y,z],-π/18) # 10 degrees rotation
+    x,y,z = rotate_z(SA[x,y,z],-π/10) # 18 degrees rotation
     println(f,"Point($i) = {$x, $y, $z};")
 end
 print(f,"Spline(1) = {1")

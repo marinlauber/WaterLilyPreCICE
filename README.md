@@ -59,8 +59,10 @@ The approach we have to use to couple a structural solver with `WaterLily.jl` us
 ### Rubber Airfoil in a flow
 
 This does not sound like a good idea, but it can actually help with gust mitigations!
+![](assets/Airfoil_forces.png)
 
 ![](assets/rubber-airfoil.gif)
+
 
 ### Turek-Hron with G+Smo
 
