@@ -6,7 +6,7 @@ using OrdinaryDiffEq
 mutable struct LumpedInterface{T} <: AbstractInterface
     mesh0           :: GeometryBasics.Mesh # initial geometry, never changed
     mesh            :: GeometryBasics.Mesh
-    srf_el          :: NTuple
+    srf_id          :: NTuple
     deformation     :: AbstractArray # might not be needed
     ControlPointsID :: AbstractArray
     forces          :: AbstractArray
@@ -116,7 +116,7 @@ end
 function get_forces!(interface::LumpedInterface, t=sum(@views(interface.dt)); kwargs...)
     # compute nodal forces
     interface.forces .= 0 # reset the forces
-    for (i,id) in interface.srf_el
+    for (i,id) in interface.srf_id
         f = dS(@views(interface.mesh[id])).*interface.func(i,t,interface)
         interface.forces[interface.map_id[id],:] .+= transpose(f)./3 # add all the contribution from the faces to the nodes
     end

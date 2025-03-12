@@ -6,7 +6,7 @@ function CalculiXInterface(T=Float64; surface_mesh="geom.inp", center=0, scale=1
                            rw_mesh="Solid-Mesh", read_data="Displacements", write_data="Forces", kwargs...)  
 
     # load the file
-    mesh,srf_id = load_inp(surface_mesh) # can we get rid of this?
+    mesh0,srf_id = load_inp(surface_mesh) # can we get rid of this?
         
     # initialise PreCICE
     PreCICE.initialize()
@@ -20,10 +20,11 @@ function CalculiXInterface(T=Float64; surface_mesh="geom.inp", center=0, scale=1
         # prepare the mesh, here we move it to the center of the domain
         push!(verts, GeometryBasics.Point3f(vertices[i,:].*scale .+ center))
     end
-    mesh = GeometryBasics.Mesh(verts,GeometryBasics.faces(mesh))
+    mesh = GeometryBasics.Mesh(verts,GeometryBasics.faces(mesh0))
     bbox = Rect(mesh.position)
     bbox = Rect(bbox.origin.-max(4,thk),bbox.widths.+max(8,2thk))
-    body = MeshBody(mesh,deepcopy(mesh),srf_id,(x,t)->x,bbox,T(scale),T(thk/2),boundary)
+    velocity = GeometryBasics.Mesh(zero(verts),GeometryBasics.faces(mesh))
+    body = MeshBody(mesh,mesh0,velocity,srf_id,(x,t)->x,bbox,T(scale),T(thk/2),boundary)
 
     # storage arrays
     forces = zeros(Float64, numberOfVertices, dimensions)

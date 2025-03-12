@@ -33,8 +33,8 @@ function MeshBody(fname::String;map=(x,t)->x,scale=1.0,boundary=true,thk=0f0,T=F
     bbox = Rect(bbox.origin.-max(4,thk),bbox.widths.+max(8,2thk))
     return MeshBody(mesh,mesh0,velocity,srf_id,map,bbox,T(scale),T(thk/2),boundary)
 end
-Base.copy(a::GeometryBasics.Mesh) = GeometryBasics.Mesh(a.mesh.position,GeometryBasics.faces(a.mesh));
-Base.copy(b::MeshBody) = MeshBody(copy(b.mesh),copy(b.mesh0),copy(velocity),b.surf_id,b.map,
+Base.copy(a::GeometryBasics.Mesh) = GeometryBasics.Mesh(a.position,GeometryBasics.faces(a));
+Base.copy(b::MeshBody) = MeshBody(copy(b.mesh),copy(b.mesh0),copy(b.velocity),b.surf_id,b.map,
                                   Rect(b.bbox),b.scale,b.half_thk,b.boundary)
 
 function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
@@ -45,8 +45,7 @@ function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
     points = pointtype[]
     faces = facetype[]
     node_idx = Int[]
-    srf_id = Int[]
-    tmp = Int[]
+    srf_id = Tuple[]
     cnt = 0
 
     # read the first 3 lines if there is the "*heading" keyword
@@ -57,7 +56,7 @@ function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
     # read the file
     while !eof(fs)
         line = readline(fs)
-        contains(line,"*ELSET, ELSET=") && (cnt+=1) #(push!(tmp,cnt))
+        contains(line,"*ELSET, ELSET=") && (cnt+=1)
         BlockType, line = parse_blocktype!(BlockType, fs, line)
         if BlockType == Val{:NodeBlock}()
             push!(node_idx, parse(Int,split(line,",")[1])) # keep track of the node index of the inp file
@@ -66,14 +65,14 @@ function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
             nodes = parse.(Int,split(line,",")[2:end])
             push!(faces, TriangleFace{Int}(facetype([findfirst(==(node),node_idx) for node in nodes])...)) # parse the face
         elseif BlockType == Val{:ElSetBlock}()
-            push!(srf_id, (cnt,parse.(Int,split(line,",")[1]))); #cnt+=1
+            push!(srf_id, (cnt, parse.(Int,split(line,",")[1])));
         else
             continue
         end
     end
     close(fs) # close file stream
     # case where there is no surface ID and we pass it a single tuple of all the faces
-    srf_id = length(tmp)==0 ? ntuple(i->(1,i),length(faces)) : ntuple(i->(tmp[i][1],tmp[i][2]-tmp[1][1]),length(tmp))
+    srf_id = length(srf_id)==0 ? ntuple(i->(1,i),length(faces)) : ntuple(i->(srf_id[i].+(0,1-srf_id[1][2])),length(srf_id))
     return Mesh(points, faces), srf_id
 end
 function parse_blocktype!(block, io, line)
@@ -244,15 +243,17 @@ forces(body::MeshBody, b::Flow, δ=2) = forces(body.mesh, b, δ, Val{body.bounda
 using Printf: @sprintf
 import WaterLily
 using WriteVTK
+
 # access the WaterLily writer to save the file
-function WaterLily.write!(w,a::MeshBody)
+function WaterLily.write!(w,a::MeshBody,t=w.count[1]) #where S<:AbstractSimulation{A,B,C,D,MeshBody}
     k = w.count[1]
     points = hcat([[p.data...] for p ∈ a.mesh.position]...)
     cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, Base.to_index.(face)) for face in faces(a.mesh)]
     vtk = vtk_grid(w.dir_name*@sprintf("/%s_%06i", w.fname, k), points, cells) 
     for (name,func) in w.output_attrib
-        vtk[name] = func(a)
+        # point/vector data must be oriented in the same way as the mesh
+        vtk[name] = ndims(func(a))==1 ? func(a) : permutedims(func(a))
     end
     vtk_save(vtk); w.count[1]=k+1
-    w.collection[k]=vtk
+    w.collection[round(t,digits=4)]=vtk
 end

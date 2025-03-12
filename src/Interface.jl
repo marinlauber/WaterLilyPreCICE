@@ -34,7 +34,8 @@ function Interface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, bou
     mesh = GeometryBasics.Mesh(verts,GeometryBasics.faces(mesh))
     bbox = Rect(mesh.position)
     bbox = Rect(bbox.origin.-max(4,thk),bbox.widths.+max(8,2thk))
-    body = MeshBody(mesh,srf_id,(x,t)->x,bbox,T(scale),T(thk/2),boundary)
+    velocity = GeometryBasics.Mesh(zero(verts),GeometryBasics.faces(mesh))
+    body = MeshBody(mesh,deepcopy(mesh),velocity,srf_id,(x,t)->x,bbox,T(scale),T(thk/2),boundary)
 
     # storage arrays
     forces = zeros(Float64, numberOfVertices, dimensions)
