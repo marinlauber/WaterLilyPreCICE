@@ -15,14 +15,18 @@ mutable struct MeshBody{T,F<:Function} <: AbstractBody
     half_thk::T #half thickness
     boundary::Bool
 end
-function MeshBody(fname::String;map=(x,t)->x,scale=1.0,boundary=true,thk=0f0,T=Float32)
+function MeshBody(fname::String;map=(x,t)->x,scale=1.0,thk=0f0,boundary=true,T=Float32)
     if endswith(fname,".inp")
         mesh0,srf_id = load_inp(fname)
     else
         mesh0 = load(fname)
         srf_id = ntuple(i->(1,i),length(mesh0))
     end
-    # points = GeometryBasics.Point.(mesh0.position*scale) # can we specify types?
+    return MeshBody(mesh0,srf_id,map,scale,thk,boundary,T)
+end
+MeshBody(mesh::M;map=(x,t)->x,scale=1.0,thk=0f0,boundary=true,T=Float32) where M<:GeometryBasics.Mesh = 
+        MeshBody(mesh,ntuple(i->(1,i),length(mesh)),map,scale,thk,boundary,T)
+function MeshBody(mesh0::M,srf_id,map,scale,thk,boundary,T) where M<:GeometryBasics.Mesh
     points = Point3f[] # scale and map the points to the corrcet location
     for (i,pnt) in enumerate(mesh0.position)
         push!(points, Point3f(map(SA[pnt.data...]*scale,0)))

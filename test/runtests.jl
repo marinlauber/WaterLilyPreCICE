@@ -33,7 +33,7 @@ using Test,WaterLilyPreCICE,StaticArrays
     @test WaterLilyPreCICE.d²(mesh[1], SA[0.,0.,z]) ≈ z^2 # this one is accurate
     @test WaterLilyPreCICE.d²(mesh[1], SA[0.,0.,2z]) ≈ 4z^2 # this one is accurate
     # the MeshBody
-    b1 = MeshBody(mesh,(1,1),(x,t)->x,Rect(0.,0.,0.,1.,1.,1.),1.0,1/2,true)
+    b1 = MeshBody(mesh;map=(x,t)->x,scale=1.0)
     b2 = copy(b1)
     @test b1.mesh == b2.mesh
     @test all(b1.map(SA[0.,0.,0.],0.) .≈ b2.map(SA[0.,0.,0.],0.))
@@ -41,18 +41,18 @@ using Test,WaterLilyPreCICE,StaticArrays
     @test all(measure(b1,SA[2/3,1/3,0.],0.) .≈ (0., [0.,0.,1.],[0.,0.,0.])) # in the bbox, accurate
     # more complex outside of box
     # @test sdf(b1,SA[2/3,1/3,2.],0.0) ≈ 1.5 # outside the bbox, accurate
-    @test all(measure(b1.mesh,SA[2/3,1/3,2.],0.) .≈ (2.0, [0.,0.,1.])) # measuring the mesh is always correct
+    @test all(measure(b1.mesh,b1.velocity,SA[2/3,1/3,2.]) .≈ (2.0, [0.,0.,1.], [0.,0.,0.])) # measuring the mesh is always correct
     # @test all(measure(b1,SA[2/3,1/3,2.],0.) .≈ (1.5, [0.,0.,0.], [0.,0.,0.])) # outside the bbox, not accurate
     # the single trinagle has zero flux contribution as it is flat on the xy-plane
     @test all(volume(b1.mesh) .≈ volume(b1) .≈ [0.,0.,0.])
     # test the important bits
     L = 64 # sphere and domain size
-    mesh = triangle_mesh(Sphere(Point3f(L/2,L/2,L/2), L/4)) # triangle mesh from a sphere
-    sphere = MeshBody(mesh,(1,1),(x,t)->x,Rect(mesh.position),1.0,1/2,true)
+    sphere = MeshBody("../meshes/sphere.stl";scale=L/2,
+                       map=(x,t)->x.+L/2)
     flow = Flow((L,L,L),(0.,0.,0.))
     apply!((x,t)->x[1],flow.p) # hydrostatic pressure
-    # @test all(WaterLilyPreCICE.volume(sphere) .≈ 4/3*π*(L/4)^3)
-    # @test all(sum(WaterLilyPreCICE.forces(sphere,flow)) .≈ [0.,0.,1.75])
+    @test all(isapprox.(WaterLilyPreCICE.volume(sphere)./(L/4)^3,4/3*π,atol=1e-1))
+    @test all(isapprox.(abs.(sum(WaterLilyPreCICE.forces(sphere,flow)))/4L^2,[0.,0.,1.16],atol=1e-2))
 end
 @testset "utils.jl" begin
     # make a sim with a NoBody()
