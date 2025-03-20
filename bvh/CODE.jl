@@ -292,8 +292,13 @@ function construct_field(L::Int, bvh::BVH{U},map::AbstractVector, mesh::Abstract
 
         leaves = leaf_entries[leaves_stack]
         meshes = [GeometryBasics.Mesh(mesh.position, leaf) for leaf in leaves]
-        sols = [find_dist(sel_mesh, x)[1] for sel_mesh in meshes]
-        dist_field[I] = sols[argmin(abs.(sols))]
+        try
+            sols = [find_dist(sel_mesh, x)[1] for sel_mesh in meshes]
+            dist_field[I] = sols[argmin(abs.(sols))]
+        catch
+            dist_field[I] = NaN
+        end
+        
 
 
         # println("tested coord ", x, " in ", round(elapsed / 1e6, digits=3), " ms")
@@ -348,48 +353,53 @@ end
 
 # total_start=time_ns()
 
-begin
-file="cent_dragon" # 0 allocs
-mesh = load(joinpath(@__DIR__, "obj/"*file*".obj")) # 81745 allocations!
-
 # begin
+const NodeType=BBox{Float32}
+
+const MortonType = UInt32
+file="kite_large" # 0 allocs
+
+@benchmark begin
+file="obj/kite_large.obj" # 0 allocs
+
+mesh = load(file) # 81745 allocations!
+
 bbox = Rect(mesh.position) # 0 allocations
 bbox2=boxtobox(bbox) #0 allocations
-bbox3=expand_box(bbox2, inc=1) #0 allocations
-lvl=6
+bbox3=expand_box(bbox2, inc=2) #0 allocations
+lvl=4
 
 boundboxs_const=constr_leaves2(bbox3, levels= lvl) #1 allocation per level
-println("constructed")
-println(typeof(boundboxs_const))
-println(eltype(boundboxs_const))
-println(length(boundboxs_const))
-
+# println("constructed")
+# println(typeof(boundboxs_const))
+# println(eltype(boundboxs_const))
+# println(length(boundboxs_const))
 boundboxs_exp=[expand_box(box, inc=0) for box in boundboxs_const];  #1 alloc
 leaf_entries=[collect_imp(box,mesh) for box in boundboxs_exp]  #checked and works
 
-println("expanded")
-println(typeof(boundboxs_exp))
-println(eltype(boundboxs_exp))
-println(length(boundboxs_exp))
+# println("expanded")
+# println(typeof(boundboxs_exp))
+# println(eltype(boundboxs_exp))
+# println(length(boundboxs_exp))
 
-boundboxs,leaf_entries_pop=remove_empty_boxes2(boundboxs_exp,leaf_entries);
-println("popped")
-println(typeof(boundboxs))
-println(eltype(boundboxs))
-println(length(boundboxs))
+# boundboxs,leaf_entries_pop=remove_empty_boxes2(boundboxs_exp,leaf_entries);
+# println("popped")
+# println(typeof(boundboxs))
+# println(eltype(boundboxs))
+# println(length(boundboxs))
 
-
-bvh= BVH(boundboxs)
+bvh= BVH(boundboxs_exp,NodeType,MortonType)
 imp_map=make_map(bvh);
+end
+L=128
 
-L=64
 
-
-dist_field=construct_field(L,bvh,imp_map,mesh,leaf_entries_pop);
+# dist_field=construct_field(L,bvh,imp_map,mesh,leaf_entries);
 
 println("constructed bvh with $lvl levels")
 
-store_vtk(dist_field,file*"_KD");
+store_vtk(dist_field,"vtis/"*file*"_large");
+println("stored vtk of ", file)
 
 fig = Figure(size = (1200, 800))
 ax = Axis3(fig[1, 1])
@@ -406,11 +416,11 @@ end
 
 #comparison against previous method
 
-@benchmark begin
+begin
     
 function measure_test(;L=32,Re=5e5,U=1,mem=Array)
     
-    body=MeshBody("obj/"*file*".obj";scale=1,boundary=true)
+    body=MeshBody("obj/"*file*".obj";scale=1,boundary=false,thk=(2+3^0.5))
 
     Simulation((L,L,L), (U,0,0), L; ν=U*L/Re, body=body, mem)
 end
@@ -418,15 +428,15 @@ end
 _body(a::Simulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a.flow)); a.flow.σ |> Array;)
 custom_attrib = Dict("d" => _body, )
 
-sim = measure_test(L=64)
+sim = measure_test(L=128)
 
 measure!(sim)
 
-# wr=vtkWriter(file*"meshbody";attrib=custom_attrib)
+wr=vtkWriter(file*"meshbody";attrib=custom_attrib)
 
-# write!(wr, sim)
+write!(wr, sim)
 
-# close(wr)
+close(wr)
 # println("dist with waterlilly calculated")
 
 end
