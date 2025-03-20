@@ -1,4 +1,4 @@
-using ImplicitBVH
+# using ImplicitBVH
 using GLMakie
 using ImplicitBVH: BBox
 using StaticArrays
@@ -6,6 +6,7 @@ using FileIO
 using MeshIO
 using GeometryBasics
 using BenchmarkTools
+#include when plotting for debugging
 include("src/plot_box.jl")
 
 #own bvh builder, everything is 1 indexed
@@ -18,20 +19,24 @@ struct BVH_simple{T}
     lvl:: Int
 end
 
-function BVH_simple( file ::String, lvl ::Int ; overlap::Int =0, T::DataType = Float64) 
+function BVH_simple( file ::String, lvl ::Int ; overlap::Int =1, T::DataType = Float64) 
     mesh=load(file)
-    box0=initial_bbox(mesh,T)
-    nodes,leaves=make_boxes(box0,lvl)
-    leaves=[expand_box(leaf,overlap) for leaf in leaves];
-    entries=[GeometryBasics.Mesh(mesh.position,split_mesh(box,mesh)) for box in leaves];
+    box0=Bounding_BBox(mesh,3,T)
+    nodes,SubD=make_boxes(box0,lvl)
+    
+    SubD=[expand_box(leaf,overlap) for leaf in SubD];
+    entries=[GeometryBasics.Mesh(mesh.position,split_mesh(box,mesh)) for box in SubD];
+
+    leaves=[Bounding_BBox(mesh_part,0,T) for mesh_part in entries]
     
     return BVH_simple{T}(mesh,nodes, leaves, entries,lvl)
 end
 
-function initial_bbox(mesh::AbstractMesh,T)
-    rec=Rect{3,T}(mesh.position)
+
+function Bounding_BBox(mesh_part::AbstractMesh,exp::Int,T::DataType)
+    rec=Rect{3,T}(mesh_part.position)
     bbox=boxtobox(rec)
-    box0=expand_box(bbox,3)
+    box0=expand_box(bbox,exp)
     return box0
 end
 
@@ -90,49 +95,49 @@ function make_boxes(box0::BBox{T},lvl::Int) where{T}
 
     return nodes,leaves
 end
-
 function split_mesh(box::BBox{T}, mesh::AbstractMesh) where T
-    #always 4 allocations!
     faces = GeometryBasics.faces(mesh)
-    points = mesh.position
-    coll = Vector{eltype(faces)}()#undef,6)
-    # println("start  ",coll)
-    for face in faces
-        verts = points[face]
-        for vert in verts
-            # println("checking vertex: ", vert)
-            # println("against box: lo = ", box.lo, ", up = ", box.up)
+    points = SVector{3,T}.(mesh.position)
 
-            if all((box.lo .<= vert) .& (vert .<= box.up)) || all((box.up .<= vert) .& (vert .<= box.lo))
-                # println("→ HIT")
+    # mesh = GeometryBasics.Mesh(SVector{3,T}.(mesh.position), GeometryBasics.faces(mesh))
+    coll = Vector{eltype(faces)}()
+
+    @inbounds for face in faces
+        for i in Tuple(face)
+            v = points[i]  # Now an SVector{3,T}
+
+            # No need for two bound orders if box.lo < box.up guaranteed
+            inside = all(box.lo .<= v .<= box.up)
+
+            if inside
                 push!(coll, face)
-                # coll[i]=face
-                # println(coll)
-                
                 break
             end
-        end    
+        end
     end
-   # coll= [coll[i] for i in eachindex(coll) if isassigned(coll, i)]
+
     return coll
 end
+
 
 function expand_box(box:: BBox{T}, overlap::Int) where T
     BBox{T}(box.lo .-overlap, box.up .+ overlap);
 end
 
-
+bvh=BVH_simple(file,4)
 begin
-
+# plots for debugging
 fig = Figure(size = (1200, 800))
 ax = Axis3(fig[1, 1])
 # boxes=vcat(bvh.nodes,bvh.leaves)
 
-wireframe!(ax, bvh.mesh, color = "black", ssao = true)
+box_tocheck=2
+
+wireframe!(ax, bvh.entries[box_tocheck], color = "black", ssao = true)
 
 lines!(ax, boxes_lines(bvh.leaves), linewidth = 2, color = "black", linestyle=:dash)
-# lines!(ax, boxes_lines([bvh.nodes[1]]), linewidth = 2, color = "gray")
-# lines!(ax, boxes_lines([bvh.nodes[2]]), linewidth = 5, color = "orange",linestyle=:solid)
+lines!(ax, boxes_lines([bvh.leaves[box_tocheck]]), linewidth = 2, color = "red")
+lines!(ax, boxes_lines([bvh.nodes[1]]), linewidth = 5, color = "orange",linestyle=:solid)
 # lines!(ax, boxes_lines([bvh.leaves[1]]), linewidth = 5, color = "blue",linestyle=:solid)
 # lines!(ax, boxes_lines([bvh.leaves[2]]), linewidth = 5, color = "blue",linestyle=:solid)
 
