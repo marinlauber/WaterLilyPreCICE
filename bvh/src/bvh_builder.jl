@@ -1,6 +1,4 @@
-# using ImplicitBVH
 using GLMakie
-using ImplicitBVH: BBox
 using StaticArrays
 using FileIO
 using MeshIO
@@ -8,8 +6,16 @@ using GeometryBasics
 using BenchmarkTools
 #include when plotting for debugging
 include("src/plot_box.jl")
+# include("src/BBox.jl")
 
 #own bvh builder, everything is 1 indexed
+
+
+struct BoundBox{T}
+    lo::SVector{3, T}
+    up::SVector{3, T}
+end
+BoundBox(lo::NTuple{3,T}, up::NTuple{3,T}) where T = Boundbox{T}(SVector{3,T}(lo), SVector{3,T}(up))
 
 
 struct TreeInfo
@@ -21,13 +27,22 @@ end
 
 struct BVH_simple{T}
     mesh::AbstractMesh
-    nodes::Vector{BBox{T}}
-    leaves::Vector{BBox{T}}
-    SubD::Vector{BBox{T}}
+    nodes::Vector{BoundBox{T}}
+    leaves::Vector{BoundBox{T}}
+    SubD::Vector{BoundBox{T}}
     entries::Vector{AbstractMesh}
     info:: TreeInfo
 end
 
+function Base.show(io::IO, bvh::BVH_simple{T}) where T
+    println(io, "BVH ")
+    println(io, " ├─ type used:  $T")
+    println(io, " ├─ levels:     $(bvh.info.lvl)")
+    println(io, " ├─ Nodes:      $(bvh.info.n_nodes)")
+    println(io, " ├─ Leaves:     $(bvh.info.n_leaves)")
+    println(io, " ├─ mesh size:  $(bvh.info.n_meshelements)")
+   
+end
 
 
 function BVH_simple( file ::String, lvl ::Int ; overlap::Int =1, T::DataType = Float64) 
@@ -65,22 +80,21 @@ function Bounding_BBox(mesh_part::AbstractMesh,exp::Real,T::DataType)
 end
 
 
-
-function inbox(x::AbstractVector{T}, box::BBox{U}) where {T,U}
+function inbox(x::AbstractVector{T}, box::BoundBox{U}) where {T,U}
     all((box.lo .<= x) .& (x .<= box.up)) || all((box.up .<= x) .& (x .<= box.lo))
 end
 
 function boxtobox(box::HyperRectangle{3,T}) where T
     # 0 allocations
-   BBox{T}(box.origin,box.origin .+box.widths)
+   BoundBox{T}(box.origin,box.origin .+box.widths)
 end
 
 
-function expand_box(box:: BBox{T}, overlap::Real) where T
-    BBox{T}(box.lo .-overlap, box.up .+ overlap);
+function expand_box(box:: BoundBox{T}, overlap::Real) where T
+    BoundBox{T}(box.lo .-overlap, box.up .+ overlap);
 end
 
-function split_box(box::BBox{T}) where T
+function split_box(box::BoundBox{T}) where T
     # println(box)
     #0 allocations
     w= box.up .- box.lo
@@ -100,16 +114,16 @@ function split_box(box::BBox{T}) where T
     max_dir ==2 ? o[2]+new_width[2] : o[2],
     max_dir ==3 ? o[3]+new_width[3] : o[3],
     )
-    return BBox{T}(o,o .+new_width),BBox{T}(o2,o2 .+new_width)
+    return BoundBox{T}(o,o .+new_width),BoundBox{T}(o2,o2 .+new_width)
 end
 
-function make_boxes(box0::BBox{T},lvl::Int) where{T}
+function make_boxes(box0::BoundBox{T},lvl::Int) where{T}
     size=2^lvl -1
     n_leaves=2^(lvl-1)
     n_nodes = size - n_leaves
 
-    # box_array=Vector{BBox{Float32}}
-    box_array = Vector{BBox{T}}(undef, size)
+    # box_array=Vector{BoundBox{Float32}}
+    box_array = Vector{BoundBox{T}}(undef, size)
     box_array[1]=box0
 
     for i in 1:2^(lvl-1)-1
@@ -125,7 +139,7 @@ function make_boxes(box0::BBox{T},lvl::Int) where{T}
 
     return nodes,leaves
 end
-function split_mesh(box::BBox{T}, mesh::AbstractMesh) where T
+function split_mesh(box::BoundBox{T}, mesh::AbstractMesh) where T
     faces = GeometryBasics.faces(mesh)
     positions=copy(mesh.position)
     points = SVector{3,T}.(mesh.position)
