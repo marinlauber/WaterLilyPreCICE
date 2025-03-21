@@ -48,7 +48,7 @@ end
 function BVH_simple( file ::String, lvl ::Int ; overlap::Int =1, T::DataType = Float64) 
     mesh=load(file)
     box0=Bounding_BBox(mesh,3,T)
-    nodes,SubD=make_boxes(box0,lvl)
+    SubD=make_boxes(box0,lvl)
     
     SubD=[expand_box(leaf,overlap) for leaf in SubD]
     entries = [
@@ -75,7 +75,7 @@ end
 function BVH_simple( mesh ::AbstractMesh, lvl ::Int ; overlap::Int =1, T::DataType = Float64) 
   
     box0=Bounding_BBox(mesh,3,T)
-    nodes,SubD=make_boxes(box0,lvl)
+    SubD=make_boxes(box0,lvl)
     
     SubD=[expand_box(leaf,overlap) for leaf in SubD]
     entries = [
@@ -86,8 +86,10 @@ function BVH_simple( mesh ::AbstractMesh, lvl ::Int ; overlap::Int =1, T::DataTy
     for box in SubD
     ]
 
-    leaves=[Bounding_BBox(mesh_part,overlap/2,T) for mesh_part in entries];
+    leaves=[Bounding_BBox(mesh_part,overlap/2,T) for mesh_part in entries]
+    # println(leaves)
     nodes=construct_nodes(leaves,lvl)
+    # println(nodes)
     info = TreeInfo(
          lvl,
         length(nodes),
@@ -128,7 +130,7 @@ end
 
 
 function construct_nodes(leaves::Vector{BoundBox{T}}, lvl::Int) where T
-    n_nodes =  length(leaves)-1
+    n_nodes =  2^(lvl-1)-1
     all_boxes = vcat(Vector{BoundBox{T}}(undef, n_nodes),copy(leaves))  # working array that will grow upward)
 
     # Fill in parent nodes from leaves upward
@@ -144,6 +146,7 @@ function construct_nodes(leaves::Vector{BoundBox{T}}, lvl::Int) where T
 end
 
 function merge_boxes(box1::BoundBox{T}, box2::BoundBox{T}) where T
+    #0 alloc
     is_valid(b) = all(isfinite, b.lo) && all(isfinite, b.up)
 
     if is_valid(box1) && !is_valid(box2)
@@ -152,7 +155,7 @@ function merge_boxes(box1::BoundBox{T}, box2::BoundBox{T}) where T
         return box2
     elseif !is_valid(box1) && !is_valid(box2)
         # Both invalid → return a "NaN" box
-        return BBox{T}(SVector(NaN, NaN, NaN), SVector(NaN, NaN, NaN))
+        return BoundBox{T}(SVector(NaN, NaN, NaN), SVector(NaN, NaN, NaN))
     end
 
     lo = SVector(
@@ -220,33 +223,31 @@ function make_boxes(box0::BoundBox{T},lvl::Int) where{T}
     for i in 1:2^(lvl-1)-1
         # println(i)
         child1,child2=split_box(box_array[i])
-        
         box_array[2i]=child1
         box_array[2i+1]=child2
     end
-
-    nodes = box_array[1:n_nodes]
     leaves = box_array[n_nodes+1:end];
-
-    return nodes,leaves
+    return leaves
 end
+
 function split_mesh(box::BoundBox{T}, mesh::AbstractMesh) where T
+    #6 allocations
     faces = GeometryBasics.faces(mesh)
     positions=copy(mesh.position)
-    points = SVector{3,T}.(mesh.position)
-
+    max=length(mesh.faces)
+    # points = SVector{3,T}.(mesh.position)
+    count=0
     # mesh = GeometryBasics.Mesh(SVector{3,T}.(mesh.position), GeometryBasics.faces(mesh))
-    coll = Vector{eltype(faces)}()
+    coll = Vector{eltype(faces)}(undef,max)
 
     @inbounds for face in faces
         for i in Tuple(face)
-            v = points[i]  # Now an SVector{3,T}
-
-            # No need for two bound orders if box.lo < box.up guaranteed
+            v = positions[i]  # Now an SVector{3,T}
             inside = all(box.lo .<= v .<= box.up)
 
             if inside
-                push!(coll, face)
+                count+=1
+                coll[count]=face
                 break
             end
         end
@@ -258,7 +259,7 @@ function split_mesh(box::BoundBox{T}, mesh::AbstractMesh) where T
         end
     end
 
-    return coll,positions
+    return coll[1:count],positions
 end
 
 
@@ -269,9 +270,9 @@ end
 # # bbox3=BBox{Float32}((33.0f0, 3.0f0, 33.0f0), (67.0f0, 102.0f0, 73.0f0))
 file="/home/raj/thesis/WaterLilyPreCICE_KD/bvh/obj/kite_large.obj" # 0 allocs
 mesh = load(file) # 81745 allocations!
-bvh=BVH_simple(mesh,4)
+bvh=BVH_simple(mesh,5)
 
-
+#@benchmark BVH_simple($mesh,$4)
 # benchmark for 4 levels
 # BenchmarkTools.Trial: 2327 samples with 1 evaluation per sample.
 #  Range (min … max):  1.723 ms …   7.108 ms  ┊ GC (min … max): 0.00% … 14.40%
@@ -299,10 +300,10 @@ wireframe!(ax, bvh.mesh, color = "black", ssao = true)
 
 # lines!(ax, boxes_lines([bvh.SubD[box_tocheck]]), linewidth = 2, color = "red", linestyle=:dash)
 lines!(ax, boxes_lines([bvh.nodes[1]]), linewidth = 10, color = "grey")
-lines!(ax, boxes_lines([bvh.nodes[5]]), linewidth = 1, color = "orange",linestyle=:solid)
-lines!(ax, boxes_lines(bvh.leaves[3:4]), linewidth = 5, color = "black",linestyle=:solid)
+lines!(ax, boxes_lines([bvh.nodes[4]]), linewidth = 1, color = "orange",linestyle=:solid)
+lines!(ax, boxes_lines(bvh.leaves[1:2]), linewidth = 5, color = "black",linestyle=:solid)
 # lines!(ax, boxes_lines([bvh.nodes[6]]), linewidth = 10, color = "black",linestyle=:solid)
-# lines!(ax, boxes_lines([merge_boxes(bvh.leaves[7],bvh.leaves[8])]), linewidth = 10, color = "green",linestyle=:solid)
+lines!(ax, boxes_lines([merge_boxes(bvh.leaves[1],bvh.leaves[2])]), linewidth = 10, color = "green",linestyle=:dash)
 
 # scatter!(ax, [Point3f(x)], color = :red, markersize = 15)
 fig
