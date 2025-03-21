@@ -5,7 +5,7 @@ using MeshIO
 using GeometryBasics
 using BenchmarkTools
 #include when plotting for debugging
-include("src/plot_box.jl")
+ include("plot_box.jl")
 # include("src/BBox.jl")
 
 #own bvh builder, everything is 1 indexed
@@ -60,7 +60,34 @@ function BVH_simple( file ::String, lvl ::Int ; overlap::Int =1, T::DataType = F
     ]
 
     leaves=[Bounding_BBox(mesh_part,overlap/2,T) for mesh_part in entries];
+    nodes=construct_nodes(leaves,lvl)
+    info = TreeInfo(
+         lvl,
+        length(nodes),
+        length(leaves),
+        length(mesh.faces)
+        )
+    
+    return BVH_simple{T}(mesh,nodes, leaves,SubD, entries,info)
+end
 
+
+function BVH_simple( mesh ::AbstractMesh, lvl ::Int ; overlap::Int =1, T::DataType = Float64) 
+  
+    box0=Bounding_BBox(mesh,3,T)
+    nodes,SubD=make_boxes(box0,lvl)
+    
+    SubD=[expand_box(leaf,overlap) for leaf in SubD]
+    entries = [
+    let result = split_mesh(box, mesh)
+        faces, verts = result
+        GeometryBasics.Mesh(verts, faces)
+    end
+    for box in SubD
+    ]
+
+    leaves=[Bounding_BBox(mesh_part,overlap/2,T) for mesh_part in entries];
+    nodes=construct_nodes(leaves,lvl)
     info = TreeInfo(
          lvl,
         length(nodes),
@@ -78,6 +105,70 @@ function Bounding_BBox(mesh_part::AbstractMesh,exp::Real,T::DataType)
     box0=expand_box(bbox,exp)
     return box0
 end
+
+# function construct_nodes(leaves::Vector{BoundBox{T}}, lvl::Int) where T
+#     total_nodes = 2^lvl - 1
+#     n_leaves = 2^(lvl - 1)
+#     n_internal =  length(leaves)-1
+
+#     nodes = Vector{BoundBox{T}}(undef, n_internal)
+#     all_boxes = vcat(nodes,copy(leaves))  # working array that will grow upward)
+
+#     # Fill in parent nodes from leaves upward
+#     for i in n_internal:-1:1
+#         left = 2i
+#         right = 2i + 1
+#         parent= merge_boxes(all_boxes[left], all_boxes[right])
+#         nodes[i] = parent
+#         push!(all_boxes, nodes[i])  # extend the working array
+#     end
+
+#     return nodes
+# end
+
+
+function construct_nodes(leaves::Vector{BoundBox{T}}, lvl::Int) where T
+    n_nodes =  length(leaves)-1
+    all_boxes = vcat(Vector{BoundBox{T}}(undef, n_nodes),copy(leaves))  # working array that will grow upward)
+
+    # Fill in parent nodes from leaves upward
+    for i in n_nodes:-1:1
+        left = 2i
+        right = 2i + 1
+        parent= merge_boxes(all_boxes[left], all_boxes[right])
+        all_boxes[i] = parent
+        # push!(all_boxes, nodes[i])  # extend the working array
+    end
+
+    return all_boxes[1:n_nodes]
+end
+
+function merge_boxes(box1::BoundBox{T}, box2::BoundBox{T}) where T
+    is_valid(b) = all(isfinite, b.lo) && all(isfinite, b.up)
+
+    if is_valid(box1) && !is_valid(box2)
+        return box1
+    elseif !is_valid(box1) && is_valid(box2)
+        return box2
+    elseif !is_valid(box1) && !is_valid(box2)
+        # Both invalid → return a "NaN" box
+        return BBox{T}(SVector(NaN, NaN, NaN), SVector(NaN, NaN, NaN))
+    end
+
+    lo = SVector(
+        min(min(box1.lo[1], box1.up[1]), min(box2.lo[1], box2.up[1])),
+        min(min(box1.lo[2], box1.up[2]), min(box2.lo[2], box2.up[2])),
+        min(min(box1.lo[3], box1.up[3]), min(box2.lo[3], box2.up[3]))
+    )
+    up = SVector(
+        max(max(box1.lo[1], box1.up[1]), max(box2.lo[1], box2.up[1])),
+        max(max(box1.lo[2], box1.up[2]), max(box2.lo[2], box2.up[2])),
+        max(max(box1.lo[3], box1.up[3]), max(box2.lo[3], box2.up[3]))
+    )
+
+    return BoundBox{T}(lo, up)
+end
+
 
 
 function inbox(x::AbstractVector{T}, box::BoundBox{U}) where {T,U}
@@ -175,29 +266,43 @@ end
 
 
 
-# bbox3=BBox{Float32}((33.0f0, 3.0f0, 33.0f0), (67.0f0, 102.0f0, 73.0f0))
-file="obj/kite_large.obj" # 0 allocs
-# mesh = load("obj/"*file*".obj") # 81745 allocations!
+# # bbox3=BBox{Float32}((33.0f0, 3.0f0, 33.0f0), (67.0f0, 102.0f0, 73.0f0))
+file="/home/raj/thesis/WaterLilyPreCICE_KD/bvh/obj/kite_large.obj" # 0 allocs
+mesh = load(file) # 81745 allocations!
+bvh=BVH_simple(mesh,4)
 
-bvh=BVH_simple(file,4)
+
+# benchmark for 4 levels
+# BenchmarkTools.Trial: 2327 samples with 1 evaluation per sample.
+#  Range (min … max):  1.723 ms …   7.108 ms  ┊ GC (min … max): 0.00% … 14.40%
+#  Time  (median):     1.927 ms               ┊ GC (median):    0.00%
+#  Time  (mean ± σ):   2.135 ms ± 456.916 μs  ┊ GC (mean ± σ):  5.62% ± 10.11%
+
+#    ▁▅█▄▅▁                                                      
+#   ▄██████▆▆▅▃▃▃▂▂▂▂▁▁▂▁▂▂▂▂▃▃▃▃▃▃▂▂▂▂▂▂▂▂▁▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ ▂
+#   1.72 ms         Histogram: frequency by time         3.7 ms <
+
+#  Memory estimate: 7.90 MiB, allocs estimate: 244.
+ 
 begin
 # plots for debugging
 fig = Figure(size = (1200, 800))
 ax = Axis3(fig[1, 1])
 # boxes=vcat(bvh.nodes,bvh.leaves)
 
-box_tocheck=3
+leaf_tocheck=2
 
-wireframe!(ax, bvh.entries[box_tocheck], color = "black", ssao = true)
+wireframe!(ax, bvh.mesh, color = "black", ssao = true)
 
-lines!(ax, boxes_lines(bvh.SubD), linewidth = 2, color = "grey", linestyle=:dash)
+# lines!(ax, boxes_lines(bvh.SubD), linewidth = 2, color = "grey", linestyle=:dash)
 
 
-lines!(ax, boxes_lines([bvh.SubD[box_tocheck]]), linewidth = 2, color = "red", linestyle=:dash)
-lines!(ax, boxes_lines([bvh.leaves[box_tocheck]]), linewidth = 2, color = "red")
-lines!(ax, boxes_lines([bvh.nodes[1]]), linewidth = 5, color = "orange",linestyle=:solid)
-# lines!(ax, boxes_lines([bvh.leaves[1]]), linewidth = 5, color = "blue",linestyle=:solid)
-# lines!(ax, boxes_lines([bvh.leaves[2]]), linewidth = 5, color = "blue",linestyle=:solid)
+# lines!(ax, boxes_lines([bvh.SubD[box_tocheck]]), linewidth = 2, color = "red", linestyle=:dash)
+lines!(ax, boxes_lines([bvh.nodes[1]]), linewidth = 10, color = "grey")
+lines!(ax, boxes_lines([bvh.nodes[5]]), linewidth = 1, color = "orange",linestyle=:solid)
+lines!(ax, boxes_lines(bvh.leaves[3:4]), linewidth = 5, color = "black",linestyle=:solid)
+# lines!(ax, boxes_lines([bvh.nodes[6]]), linewidth = 10, color = "black",linestyle=:solid)
+# lines!(ax, boxes_lines([merge_boxes(bvh.leaves[7],bvh.leaves[8])]), linewidth = 10, color = "green",linestyle=:solid)
 
 # scatter!(ax, [Point3f(x)], color = :red, markersize = 15)
 fig
