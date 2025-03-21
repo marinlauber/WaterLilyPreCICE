@@ -11,33 +11,63 @@ include("src/plot_box.jl")
 
 #own bvh builder, everything is 1 indexed
 
+
+struct TreeInfo
+    lvl::Int
+    n_nodes::Int
+    n_leaves::Int
+    n_meshelements::Int
+end
+
 struct BVH_simple{T}
     mesh::AbstractMesh
     nodes::Vector{BBox{T}}
     leaves::Vector{BBox{T}}
+    SubD::Vector{BBox{T}}
     entries::Vector{AbstractMesh}
-    lvl:: Int
+    info:: TreeInfo
 end
+
+
 
 function BVH_simple( file ::String, lvl ::Int ; overlap::Int =1, T::DataType = Float64) 
     mesh=load(file)
     box0=Bounding_BBox(mesh,3,T)
     nodes,SubD=make_boxes(box0,lvl)
     
-    SubD=[expand_box(leaf,overlap) for leaf in SubD];
-    entries=[GeometryBasics.Mesh(mesh.position,split_mesh(box,mesh)) for box in SubD];
+    SubD=[expand_box(leaf,overlap) for leaf in SubD]
+    entries = [
+    let result = split_mesh(box, mesh)
+        faces, verts = result
+        GeometryBasics.Mesh(verts, faces)
+    end
+    for box in SubD
+    ]
 
-    leaves=[Bounding_BBox(mesh_part,0,T) for mesh_part in entries]
+    leaves=[Bounding_BBox(mesh_part,overlap/2,T) for mesh_part in entries];
+
+    info = TreeInfo(
+         lvl,
+        length(nodes),
+        length(leaves),
+        length(mesh.faces)
+        )
     
-    return BVH_simple{T}(mesh,nodes, leaves, entries,lvl)
+    return BVH_simple{T}(mesh,nodes, leaves,SubD, entries,info)
 end
 
 
-function Bounding_BBox(mesh_part::AbstractMesh,exp::Int,T::DataType)
+function Bounding_BBox(mesh_part::AbstractMesh,exp::Real,T::DataType)
     rec=Rect{3,T}(mesh_part.position)
     bbox=boxtobox(rec)
     box0=expand_box(bbox,exp)
     return box0
+end
+
+
+
+function inbox(x::AbstractVector{T}, box::BBox{U}) where {T,U}
+    all((box.lo .<= x) .& (x .<= box.up)) || all((box.up .<= x) .& (x .<= box.lo))
 end
 
 function boxtobox(box::HyperRectangle{3,T}) where T
@@ -45,10 +75,10 @@ function boxtobox(box::HyperRectangle{3,T}) where T
    BBox{T}(box.origin,box.origin .+box.widths)
 end
 
-# bbox3=BBox{Float32}((33.0f0, 3.0f0, 33.0f0), (67.0f0, 102.0f0, 73.0f0))
-file="obj/kite_large.obj" # 0 allocs
-# mesh = load("obj/"*file*".obj") # 81745 allocations!
 
+function expand_box(box:: BBox{T}, overlap::Real) where T
+    BBox{T}(box.lo .-overlap, box.up .+ overlap);
+end
 
 function split_box(box::BBox{T}) where T
     # println(box)
@@ -97,6 +127,7 @@ function make_boxes(box0::BBox{T},lvl::Int) where{T}
 end
 function split_mesh(box::BBox{T}, mesh::AbstractMesh) where T
     faces = GeometryBasics.faces(mesh)
+    positions=copy(mesh.position)
     points = SVector{3,T}.(mesh.position)
 
     # mesh = GeometryBasics.Mesh(SVector{3,T}.(mesh.position), GeometryBasics.faces(mesh))
@@ -116,13 +147,23 @@ function split_mesh(box::BBox{T}, mesh::AbstractMesh) where T
         end
     end
 
-    return coll
+    for i in eachindex(positions)
+        if !inbox(positions[i], box)
+            positions[i] = Point3f(NaN32, NaN32, NaN32)
+        end
+    end
+
+    return coll,positions
 end
 
 
-function expand_box(box:: BBox{T}, overlap::Int) where T
-    BBox{T}(box.lo .-overlap, box.up .+ overlap);
-end
+
+
+
+
+# bbox3=BBox{Float32}((33.0f0, 3.0f0, 33.0f0), (67.0f0, 102.0f0, 73.0f0))
+file="obj/kite_large.obj" # 0 allocs
+# mesh = load("obj/"*file*".obj") # 81745 allocations!
 
 bvh=BVH_simple(file,4)
 begin
@@ -131,11 +172,14 @@ fig = Figure(size = (1200, 800))
 ax = Axis3(fig[1, 1])
 # boxes=vcat(bvh.nodes,bvh.leaves)
 
-box_tocheck=2
+box_tocheck=3
 
 wireframe!(ax, bvh.entries[box_tocheck], color = "black", ssao = true)
 
-lines!(ax, boxes_lines(bvh.leaves), linewidth = 2, color = "black", linestyle=:dash)
+lines!(ax, boxes_lines(bvh.SubD), linewidth = 2, color = "grey", linestyle=:dash)
+
+
+lines!(ax, boxes_lines([bvh.SubD[box_tocheck]]), linewidth = 2, color = "red", linestyle=:dash)
 lines!(ax, boxes_lines([bvh.leaves[box_tocheck]]), linewidth = 2, color = "red")
 lines!(ax, boxes_lines([bvh.nodes[1]]), linewidth = 5, color = "orange",linestyle=:solid)
 # lines!(ax, boxes_lines([bvh.leaves[1]]), linewidth = 5, color = "blue",linestyle=:solid)
@@ -144,3 +188,6 @@ lines!(ax, boxes_lines([bvh.nodes[1]]), linewidth = 5, color = "orange",linestyl
 # scatter!(ax, [Point3f(x)], color = :red, markersize = 15)
 fig
 end
+
+
+save("entrie1.obj", bvh.entries[1])
