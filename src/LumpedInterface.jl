@@ -7,15 +7,16 @@ mutable struct LumpedInterface{T} <: AbstractInterface
     mesh0           :: GeometryBasics.Mesh # initial geometry, never changed
     mesh            :: GeometryBasics.Mesh
     srf_id          :: NTuple
-    deformation     :: AbstractArray # might not be needed
-    ControlPointsID :: AbstractArray
-    forces          :: AbstractArray
+    deformation     :: AbstractArray{T} # might not be needed
+    ControlPointsID :: AbstractArray{T}
+    forces          :: AbstractArray{T}
     func            :: Function
-    map_id          :: AbstractVector
-    dt              :: Vector{T}  # time step vector
-    Q               :: Vector{T}  # flow rate vector
-    P               :: Vector{T}  # pressure vector
+    map_id          :: AbstractVector{T}
+    dt              :: AbstractVector{T}  # time step vector
+    Q               :: AbstractVector{T}  # flow rate vector
+    P               :: AbstractVector{T}  # pressure vector
     integrator      :: Union{Nothing,OrdinaryDiffEq.ODEIntegrator}
+    sol             :: AbstractVector{T}
     mesh_store      :: GeometryBasics.Mesh # storage
 end
 
@@ -58,11 +59,10 @@ function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)
     
     # generate lumped model, if the 'prob' is not provided, we return a nothing
     integrator = init(prob, Vern7(), reltol=1e-6, abstol=1e-9)
-    u₀ = [0.,1.,2.] #deepcopy(integrator.u0)
 
     # return interface
     LumpedInterface(mesh,deepcopy(mesh),srf_id,vertices,ControlPointsID,
-                    forces,func,map_id,T[0],T[0],T[0],integrator,deepcopy(mesh))
+                    forces,func,map_id,T[0],T[0],T[0],integrator,T[],deepcopy(mesh))
 end
 
 # binding 
@@ -84,6 +84,7 @@ function readData!(interface::LumpedInterface)
         # save the mesh at this step
         interface.mesh_store = deepcopy(interface.mesh)
         # save initial condition of ODE solver
+        interface.u₀ = deepcopy(interface.integrator.u)
     end
     # Read control point displacements
     interface.deformation = PreCICE.readData("Solid-Nodes", "Displacements",
@@ -108,7 +109,8 @@ function update!(interface::LumpedInterface)
     push!(interface.Q, (Vᵢ-WaterLilyPreCICE.volume(interface.mesh)[1]) / interface.dt[end])
     # update 0D model
     # interface.integrator... = interface.Q # modify flow rate
-    # OrdinaryDiffEq.step!(interface.integrator, interface.dt[end], false)
+    OrdinaryDiffEq.step!(interface.integrator, interface.dt[end], false)
+    push!(interface.sol, [interface.integrator.t, interface.integrator.u])
     # compute forces
     get_forces!(interface)
 end
@@ -141,6 +143,8 @@ function writeData!(interface::LumpedInterface)
         # pop the flux and pressures
         pop!(interface.dt); pop!(interface.Q); pop!(interface.P)
         # revert state of ODE solver
+        pop!(interface.sol)
+        SciMLBase.set_ut!(interface.integrator, interface.u₀[2], interface.u₀[1])
     end
 end
 
