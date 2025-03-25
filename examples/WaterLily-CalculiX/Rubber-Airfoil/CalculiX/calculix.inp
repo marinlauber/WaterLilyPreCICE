@@ -3,25 +3,27 @@
 *INCLUDE, INPUT=interface.nam
 
 *BOUNDARY
- Nfixed, 1, 6, 0.000000
- Ninterface, 3, 4, 0.000000
+ Nfixed, 1, 6, 0.0
+ Ninterface, 3, 3, 0.0
 
+** units are in [m, kg, s], so Pre = kg/(m*S^2) = 1 N/m^2 [Pa]
 *MATERIAL,NAME=RUBBER
 *ELASTIC
- 5.0e5, 0.33
+ 8.0e4, 0.33
 *DENSITY
- 90.0
+ 1200.0
 *DAMPING, ALPHA=100.00, BETA=0.00
 
 *SOLID SECTION, MATERIAL=RUBBER, ELSET=AIRFOIL
 
 *STEP,NLGEOM,INC=100000
 *DYNAMIC
- 0.1, 10.0
+ 0.1, 100.0
 
+** forces are in N = kg*m/s^2
 *CLOAD
- Ninterface, 1, 1,  0.06
- Ninterface, 2, 2, -0.02
+ Ninterface, 1, 1, 0.0
+ Ninterface, 2, 2, 0.0
  Ninterface, 3, 3, 0.0
 
 *NODE FILE,FREQUENCY=5

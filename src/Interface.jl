@@ -62,7 +62,7 @@ end
 function update!(interface::S, sim::CoupledSimulation; kwargs...) where S<:Interface
     # update mesh position, measure is done elsewhere
     points = Point3f[]
-    for (i,pnt) in enumerate(sim.store.b.mesh.position)
+    for (i,pnt) in enumerate(sim.body.mesh0.position) # initial mesh is in the ref config.
         push!(points, Point3f(SA[pnt.data...] .+ sim.body.scale.*interface.deformation[i,:]))
     end
     # update

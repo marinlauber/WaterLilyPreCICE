@@ -8,10 +8,10 @@ mutable struct LumpedInterface{T} <: AbstractInterface
     mesh            :: GeometryBasics.Mesh
     srf_id          :: NTuple
     deformation     :: AbstractArray{T} # might not be needed
-    ControlPointsID :: AbstractArray{T}
+    ControlPointsID :: AbstractArray{Int32}
     forces          :: AbstractArray{T}
     func            :: Function
-    map_id          :: AbstractVector{T}
+    map_id          :: AbstractVector
     dt              :: AbstractVector{T}  # time step vector
     Q               :: AbstractVector{T}  # flow rate vector
     P               :: AbstractVector{T}  # pressure vector
@@ -31,7 +31,7 @@ function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)
 
     # create coupling
     PreCICE.createParticipant("LPM", configFileName, 0, 1)
-    
+
     # load the file
     mesh,srf_id = load_inp(surface_mesh) # can we get rid of this?
 
@@ -39,10 +39,10 @@ function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)
     if PreCICE.requiresInitialData()
         @assert true "this is not true"
     end
-        
+
     # initialise PreCICE
     PreCICE.initialize()
-    
+
     # we need to initialize before we can get the mesh points and coordinates
     (ControlPointsID, ControlPoints) = PreCICE.getMeshVertexIDsAndCoordinates("Solid-Nodes")
     ControlPointsID = Array{Int32}(ControlPointsID)
@@ -55,8 +55,10 @@ function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)
 
     # mapping from center to nodes, needed for the forces
     forces = zeros(T, size(ControlPoints))
+    vertices .= 0 # reset since tey become the displacements
     map_id = map(((i,F),)->vcat(Base.to_index.(F).data...),enumerate(faces(mesh)))
-    
+    @show typeof(map_id)    
+
     # generate lumped model, if the 'prob' is not provided, we return a nothing
     integrator = init(prob, Vern7(), reltol=1e-6, abstol=1e-9)
 
@@ -84,11 +86,11 @@ function readData!(interface::LumpedInterface)
         # save the mesh at this step
         interface.mesh_store = deepcopy(interface.mesh)
         # save initial condition of ODE solver
-        interface.u₀ = deepcopy(interface.integrator.u)
+        !isnothing(interface.integrator) && (interface.u₀ = deepcopy(interface.integrator.u))
     end
     # Read control point displacements
-    interface.deformation = PreCICE.readData("Solid-Nodes", "Displacements",
-                                             interface.ControlPointsID, interface.dt[end])
+    interface.deformation .= PreCICE.readData("Solid-Nodes", "Displacements",
+                                              interface.ControlPointsID, interface.dt[end])
 end
 
 """
@@ -108,12 +110,13 @@ function update!(interface::LumpedInterface)
     # update flow rate @TODO, can we do that on the displacements directly?
     push!(interface.Q, (Vᵢ-WaterLilyPreCICE.volume(interface.mesh)[1]) / interface.dt[end])
     # update 0D model
-    # interface.integrator... = interface.Q # modify flow rate
-    OrdinaryDiffEq.step!(interface.integrator, interface.dt[end], false)
-    push!(interface.sol, [interface.integrator.t, interface.integrator.u])
+    !isnothing(interface.integrator) && integrate!(interface)
     # compute forces
     get_forces!(interface)
 end
+
+integrate!(a::LumpedInterface) = (OrdinaryDiffEq.step!(a.integrator, a.dt[end], false);
+                                  push!(a.sol, [a.integrator.t, a.integrator.u]))
 
 function get_forces!(interface::LumpedInterface, t=sum(@views(interface.dt)); kwargs...)
     # compute nodal forces
@@ -143,8 +146,8 @@ function writeData!(interface::LumpedInterface)
         # pop the flux and pressures
         pop!(interface.dt); pop!(interface.Q); pop!(interface.P)
         # revert state of ODE solver
-        pop!(interface.sol)
-        SciMLBase.set_ut!(interface.integrator, interface.u₀[2], interface.u₀[1])
+        !isnothing(interface.integrator) && pop!(interface.sol)
+        !isnothing(interface.integrator) && SciMLBase.set_ut!(interface.integrator, interface.u₀[2], interface.u₀[1])
     end
 end
 

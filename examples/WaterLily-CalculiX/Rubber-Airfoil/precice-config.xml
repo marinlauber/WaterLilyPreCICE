@@ -45,8 +45,9 @@
 
   <coupling-scheme:serial-explicit>
     <participants first="WaterLily" second="Calculix"/>
-    <max-time value="20.0" />
-    <time-window-size value="-1" method="first-participant"/>
+    <max-time value="5.0" />
+    <!-- <time-window-size value="-1" method="first-participant"/> -->
+    <time-window-size value="0.005"/>
     <exchange data="Displacements" mesh="Solid-Mesh" from="Calculix" to="WaterLily"/>
     <exchange data="Forces" mesh="Solid-Mesh" from="WaterLily" to="Calculix"/>
   </coupling-scheme:serial-explicit>

@@ -37,7 +37,7 @@ function Windkessel!(du,u,p,t)
     (VLV, Pao) = u
     (Pfill,Rmv_fwd,Rmv_bwd,Rao_fwd,Rao_bwd,R,C)  = p
 
-    #first calculate PLV from elastance and VLV 
+    # first calculate PLV from elastance and VLV 
     PLV = computePLV(t,VLV)
 
     # calculate Qmv, Pfilling>PLV; forward transmitral flow, PLV>Pfilling - backward transmitral flow
@@ -52,8 +52,8 @@ function Windkessel!(du,u,p,t)
 end
 
 #Setup
-u₀ = [EDV, 500] # initial conditions
-tspan = (0.0, 10.0)
+u₀ = [EDV, 60] # initial conditions
+tspan = (0.0, 8.0)
 params = [Pfilling, Rmv_fwd, Rmv_bwd, Rao_fwd, Rao_bwd, R_WK2, C_WK2]
 
 #Pass to solver
@@ -61,6 +61,6 @@ prob = ODEProblem(Windkessel!, u₀, tspan, params)
 # https://docs.sciml.ai/DiffEqDocs/stable/basics/common_solver_opts
 @time sol = solve(prob, Tsit5(), dtmax=0.02)
 
-plot(sol.t,computePLV.(sol.t, getindex.(sol.u, 1)),label="P_\\ LV",lw=2)
-plot!(sol, idxs = [2] ,linewidth = 2, title = "Windkessel model",
-      xaxis = "Time (t/T)", yaxis = "Pressure (mmHg)", label = "P_\\ AO")
+plot(sol.t, computePLV.(sol.t, getindex.(sol.u, 1)), label="P_\\ LV",lw=2)
+plot!(sol, idxs=[2] ,linewidth=2, title="Windkessel model",
+      xaxis="Time (t/T)", yaxis="Pressure (mmHg)", label="P_\\ AO")

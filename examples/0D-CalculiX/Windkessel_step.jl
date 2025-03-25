@@ -50,30 +50,10 @@ function Windkessel!(du,u,p,t)
     du[1] = Qmv - Qao          #dVLV/dt=Qmv-Qao
     du[2] = Qao/C - Pao/(R*C)  #dPao/dt=Qao/C-Pao/RC
 end
-# formulations in P are easier for coupled 0D-3D models
-function Windkessel_P!(du,u,p,t)
-    # unpack
-    (PLV, Pao) = u
-    (Pfill,Rmv_fwd,Rmv_bwd,Rao_fwd,Rao_bwd,R,C)  = p
-
-    #first calculate PLV from elastance and VLV 
-    # PLV = computePLV(t,VLV)
-
-    # calculate Qmv, Pfilling>PLV; forward transmitral flow, PLV>Pfilling - backward transmitral flow
-    Qmv = Pfill ≥ PLV ? (Pfill-PLV)/Rmv_fwd : (PLV-Pfill)/Rmv_bwd
-    
-    # calculate Qao, PLV>Pao; forward aortic flow, PLV>Pao; backward aortic flow
-    Qao = PLV ≥ Pao ? (PLV-Pao)/Rao_fwd : (Pao-PLV)/Rao_bwd
-
-    # rates
-    du[1] =                 #dPLV/dt=
-    du[2] = Qao/C - Pao/(R*C)  #dPao/dt=Qao/C-Pao/RC
-end
-
 
 #Setup
-u₀ = [EDV, 500] # initial conditions
-tspan = (0.0, 10.0)
+u₀ = [EDV, 60] # initial conditions
+tspan = (0.0, 4.0)
 params = [Pfilling, Rmv_fwd, Rmv_bwd, Rao_fwd, Rao_bwd, R_WK2, C_WK2]
 
 #Pass to solver
@@ -97,8 +77,48 @@ t_sol = []
 end
 t = getindex.(t_sol, 1)
 
-plot(sol.t,computePLV.(sol.t, getindex.(sol.u, 1)),label="P_\\ LV",lw=2)
-plot!(t, computePLV.(t, getindex.(t_sol, 2)), label="PLV",lw=2, ls=:dash)
-plot!(sol, idxs = [2] ,linewidth = 2, title = "Windkessel model",
-xaxis = "Time (t/T)", yaxis = "Pressure (mmHg)", label = "P_\\ AO")
-plot!(t, getindex.(t_sol, 3), label="PA0",lw=2, ls=:dash)
+p1 = plot(sol.t, computePLV.(sol.t, getindex.(sol.u, 1)),label="P_\\ LV",lw=2)
+plot!(p1, t, computePLV.(t, getindex.(t_sol, 2)), label="PLV",lw=2, ls=:dash)
+plot!(p1, sol, idxs=[2] ,linewidth=2, xaxis="Time (t/T)", yaxis="Pressure (mmHg)", label="P_\\ AO")
+plot!(p1, t, getindex.(t_sol, 3), label="PA0",lw=2, ls=:dash)
+
+p2 = plot(getindex.(sol.u, 1), computePLV.(sol.t, getindex.(sol.u, 1)),
+     label=:none, lw=2, xlims=(0,150), ylims=(0,100), xlabel="Volume")
+plot(p1,p2;layout=(1,2))
+
+
+# formulations in P are easier for coupled 0D-3D models
+function Windkessel_P!(du,u,p,t)
+    # unpack
+    (PLV, Qoa) = u
+    (Pfill,Rmv_fwd,Rmv_bwd,Rao_fwd,Rao_bwd,R,C)  = p
+    @show Pfill,PLV,Pao
+
+    # what the flow rate around the mitral valve 
+    Qmv = Pfill ≥ PLV ? (Pfill-PLV)/Rmv_fwd : (PLV-Pfill)/Rmv_bwd
+    @show Qmv
+
+    # what way is the flow going in the aortic valve?
+    # Qao = PLV ≥ Pao ? (PLV-Pao)/Rao_fwd : (Pao-PLV)/Rao_bwd
+    # @show Qao
+
+    # given the flow rate into the aorta, what is the ventricular pressure?
+    PLV = PLV ≥ Pao ? -Qao*Rao_fwd + Pao : Qmv*Rmv_fwd + Pfill
+    # u[1] = PLV
+    @show PLV
+
+    # rates
+    # du[1] = 0                  #dPLV/dt=PLV-Pao
+    # du[2] = Qao/C - Pao/(R*C)  #dPao/dt=Qao/C-Pao/RC
+
+    # rates
+    du[1] = 0 # dPLV/dt
+    du[2] = 0 # dQao/dt
+end
+
+u = [2Pfilling, Pfilling+1] # initial conditions
+du = zeros(2)
+p = [Pfilling, Rmv_fwd, Rmv_bwd, Rao_fwd, Rao_bwd, R_WK2, C_WK2]
+for i in 1:8
+    Windkessel_P!(du,u,p,0.0)
+end
