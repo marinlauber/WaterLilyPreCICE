@@ -18,7 +18,7 @@
 
 *STEP,NLGEOM,INC=100000
 *DYNAMIC
- 0.1, 100.0
+ 0.1, 10000.0
 
 ** forces are in N = kg*m/s^2
 *CLOAD

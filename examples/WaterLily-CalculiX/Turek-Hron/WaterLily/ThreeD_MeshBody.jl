@@ -1,0 +1,43 @@
+using WaterLilyPreCICE,StaticArrays,WriteVTK
+
+function make_sim(;L=128,Re=250,U=1)
+    # move the geometry to the center of the domain
+    map(x,t) = x .+ SA[0.2L/0.41,0.2L/0.41,0]
+    
+    # make the body from the stl mesh
+    body = MeshBody(joinpath(@__DIR__,"../CalculiX/surface.inp");map,scale=0.1L/0.41)
+    
+    # velocity profile of Turek Hron
+    function uBC(i,x,t)
+        i ≠ 1 && return convert(typeof(t), 0.0)
+        return convert(typeof(t), 1.5*U*x[2]/L*(1.0-x[2]/L)/0.5^2)
+    end
+    
+    # generate sim
+    Simulation((6L,L), uBC, L; U=U, ν=U*L/Re, body)
+end
+
+# make a writer with some attributes to output to the file
+vtk_velocity(a::Simulation) = a.flow.u |> Array;
+vtk_pressure(a::Simulation) = a.flow.p |> Array;
+vtk_body(a::Simulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a.flow)); a.flow.σ |> Array;)
+vtk_vbody(a::Simulation) = a.flow.V |> Array;
+vtk_mu0(a::Simulation) = a.flow.μ₀ |> Array;
+custom_attrib = Dict("u"=>vtk_velocity, "p"=>vtk_pressure, "d"=>vtk_body, "v"=>vtk_vbody, "μ₀"=>vtk_mu0,)
+
+# make the sim
+sim = make_sim(L=128)
+# make the paraview writer
+wr = vtkWriter("test";attrib=custom_attrib)
+# duration and write steps
+t₀,duration,step = 0.,10,0.1
+# run the sim
+@time for tᵢ in range(t₀,t₀+duration;step)
+    # update until time tᵢ in the background
+    sim_step!(sim,tᵢ;remeasure=true)
+    write!(wr,sim)
+    # f = WaterLilyPreCICE.forces(sim.body,sim.flow)
+    # print time step
+    println("tU/L=",round(tᵢ,digits=4),", Δt=",round(sim.flow.Δt[end],digits=3))
+end
+close(wr)
