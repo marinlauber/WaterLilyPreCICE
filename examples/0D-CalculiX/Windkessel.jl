@@ -5,6 +5,7 @@ using StaticArrays,Plots,OrdinaryDiffEq
 Emax = 2                    #mmHg/ml; slope of the ESPVR
 V0 = 20                     #ml; intercept with volume axis of the ESPVR
 Pfilling = 5                #mmHg; venous filling pressure
+Pout = 5                    #mmHg: 
 EDV = 120                   #ml; end-diastolic volume. We will use EDV with Pvenous to calculate Emin
 Emin = Pfilling/(EDV-V0)    #mmHg/ml
 HR = 60                     #heart rate in beats/min
@@ -35,7 +36,7 @@ plot!(t,computePLV.(t,EDV),label="PLV",lw=2)
 function Windkessel!(du,u,p,t)
     # unpack
     (VLV, Pao) = u
-    (Pfill,Rmv_fwd,Rmv_bwd,Rao_fwd,Rao_bwd,R,C)  = p
+    (Pfill,Rmv_fwd,Rmv_bwd,Rao_fwd,Rao_bwd,R,C,Pout)  = p
 
     # first calculate PLV from elastance and VLV 
     PLV = computePLV(t,VLV)
@@ -48,19 +49,30 @@ function Windkessel!(du,u,p,t)
 
     # rates
     du[1] = Qmv - Qao          #dVLV/dt=Qmv-Qao
-    du[2] = Qao/C - Pao/(R*C)  #dPao/dt=Qao/C-Pao/RC
+    du[2] = Qao/C - (Pao-Pout)/(R*C)  #dPao/dt=Qao/C-Pao/RC
 end
+
+Qao(Plv, Pao; params) = Plv ≥ Pao ? (Plv-Pao)/params[4] : (Pao-Plv)/params[5]
+Qmv(Plv, Pfill; params) = Pfill ≥ Plv ? (Pfill-Plv)/params[2] : (Plv-Pfill)/params[3]
 
 #Setup
 u₀ = [EDV, 60] # initial conditions
-tspan = (0.0, 8.0)
-params = [Pfilling, Rmv_fwd, Rmv_bwd, Rao_fwd, Rao_bwd, R_WK2, C_WK2]
+tspan = (0.0, 20.0)
+params = [Pfilling, Rmv_fwd, Rmv_bwd, Rao_fwd,
+         Rao_bwd, R_WK2, C_WK2, Pout]
 
 #Pass to solver
 prob = ODEProblem(Windkessel!, u₀, tspan, params)
 # https://docs.sciml.ai/DiffEqDocs/stable/basics/common_solver_opts
-@time sol = solve(prob, Tsit5(), dtmax=0.02)
+@time sol = solve(prob, Tsit5(), dtmax=1e-3)
+Plv = computePLV.(sol.t, sol[1,:])
 
-plot(sol.t, computePLV.(sol.t, getindex.(sol.u, 1)), label="P_\\ LV",lw=2)
-plot!(sol, idxs=[2] ,linewidth=2, title="Windkessel model",
-      xaxis="Time (t/T)", yaxis="Pressure (mmHg)", label="P_\\ AO")
+p1=plot(sol.t, Plv, title="Windkessel model", xaxis="Cardiac Cycle (-)",
+        yaxis="Pressure (mmHg)", label="P_\\ LV",lw=2)
+plot!(p1,sol.t, sol[2,:] ,lw=2, label="P_\\ AO", ls=:dashdot, legend=:topleft)
+p2=twinx(p1)
+plot!(p2,sol.t, 0.1.*Qao.(Plv, sol[2,:]; params), 
+      c=:4, label="Q_\\ AO", ls=:dash, lw=2, yaxis="Flow rate (ml/s)")
+plot!(p2,sol.t, 0.1.*Qmv.(Plv, Pfilling; params), label="Q_\\ MV",
+      c=:3, ls=:dot, lw=2)
+xlims!(19,20)
