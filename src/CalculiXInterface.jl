@@ -3,7 +3,8 @@
 # this is a constructor for a the calculix interface, which is the same as the classical interface
 # except that the mesh is read from a CalculiX input file directly, and not from the surface file
 function CalculiXInterface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, boundary=true, thk=0, 
-                           rw_mesh="Solid-Mesh", read_data="Displacements", write_data="Forces", kwargs...)  
+                           rw_mesh="Solid-Mesh", read_data="Displacements", write_data="Forces", 
+                           passive_bodies=nothing, kwargs...)
 
     # load the file
     mesh0,srf_id = load_inp(surface_mesh) # can we get rid of this?
@@ -35,6 +36,9 @@ function CalculiXInterface(T=Float64; surface_mesh="geom.inp", center=0, scale=1
     
     # initilise PreCICE
     dt = PreCICE.getMaxTimeStepSize()
+
+    # add some passive_bodies if we need
+    body = add_bodies(body, passive_bodies)
     
     # return coupling interface
     interface = Interface(ControlPointsID, forces, deformation, map_id, [dt], rw_mesh, read_data, write_data)

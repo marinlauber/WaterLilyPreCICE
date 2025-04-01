@@ -13,14 +13,15 @@ mutable struct LumpedInterface{T} <: AbstractInterface
     func            :: Function
     map_id          :: AbstractVector
     dt              :: AbstractVector{T}  # time step vector
-    Q               :: AbstractVector{T}  # flow rate vector
+    V               :: AbstractVector{T}  # flow rate vector
     P               :: AbstractVector{T}  # pressure vector
     integrator      :: Union{Nothing,OrdinaryDiffEq.ODEIntegrator}
-    sol             :: AbstractVector{T}
+    u₀              :: Union{Nothing,AbstractVector{T}}
+    sol             :: AbstractVector
     mesh_store      :: GeometryBasics.Mesh # storage
 end
 
-function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)->0, prob=nothing, kwargs...)
+function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)->0, integrator=nothing, kwargs...)
 
     # keyword aguments might be specified
     if size(ARGS, 1) < 1
@@ -57,19 +58,18 @@ function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)
     forces = zeros(T, size(ControlPoints))
     vertices .= 0 # reset since tey become the displacements
     map_id = map(((i,F),)->vcat(Base.to_index.(F).data...),enumerate(faces(mesh)))
-    @show typeof(map_id)    
+    
+    # time step
+    dt_precice = PreCICE.getMaxTimeStepSize()
 
-    # generate lumped model, if the 'prob' is not provided, we return a nothing
-    integrator = init(prob, Vern7(), reltol=1e-6, abstol=1e-9)
+    # generate lumped model, if the 'integrator' is not provided, we return a nothing
+    u₀ = isnothing(integrator) ? nothing : deepcopy(integrator.u)
+    V₀ = T[sum(volume(mesh))./3.]
 
-    # return interface
+    # return interfaceFQ
     LumpedInterface(mesh,deepcopy(mesh),srf_id,vertices,ControlPointsID,
-                    forces,func,map_id,T[0],T[0],T[0],integrator,T[],deepcopy(mesh))
+                    forces,func,map_id,T[0],V₀,T[0],integrator,u₀,[],deepcopy(mesh))
 end
-
-# binding 
-OrdinaryDiffEq.init(a::Nothing, args...; kwargs...) = nothing # no init if now problem is provided
-OrdinaryDiffEq.step!(a::Nothing, args...; kwargs...) = nothing # no step if now integrator is provided
 
 """
     readData!(::LumpedInterface)
@@ -99,25 +99,46 @@ end
 Updates the interface conditions (the forces) from the interface function.
 """
 function update!(interface::LumpedInterface)
-    # store the volume for flow rate computation
-    Vᵢ = WaterLilyPreCICE.volume(interface.mesh)[1]
     # update the mesh
     points = Point3f[]
     for (i,pnt) in enumerate(interface.mesh0.position)
         push!(points, Point3f(SA[pnt.data...] .+ interface.deformation[i,:]))
     end
     interface.mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(interface.mesh0))
-    # update flow rate @TODO, can we do that on the displacements directly?
-    push!(interface.Q, (Vᵢ-WaterLilyPreCICE.volume(interface.mesh)[1]) / interface.dt[end])
+    # stores the volume
+    push!(interface.V, volume(interface))
     # update 0D model
-    !isnothing(interface.integrator) && integrate!(interface)
+    if !isnothing(interface.integrator)
+        SciMLBase.set_u!(interface.integrator, [get_Q(interface),interface.u₀[2:end]...])
+        integrate!(interface)
+        push!(interface.P, interface.integrator.u[1])
+    end
     # compute forces
     get_forces!(interface)
 end
 
-integrate!(a::LumpedInterface) = (OrdinaryDiffEq.step!(a.integrator, a.dt[end], false);
+"""
+    integrate!(a::LumpedInterface)
+
+Integrate the 0D model, this function will step the ODE solver from integrator.t to 
+integrator.t + a.dt[end] and stops exaclty there. It will also store the solution at
+each coupling step.
+"""
+integrate!(a::LumpedInterface) = (OrdinaryDiffEq.step!(a.integrator, a.dt[end], true);
                                   push!(a.sol, [a.integrator.t, a.integrator.u]))
 
+"""
+    get_Q(::LumpedInterface)
+
+Get the flow rate for the 0D model, either using a 1st or 2nd order scheme.
+"""
+get_Q(a::LumpedInterface) = length(a.V)<3 ? sum(@view(a.V[end-1:end]).*SA[-1.,1])/a.dt[end] : sum(@view(a.V[end-2:end]).*SA[1.,-4.,3.])/2a.dt[end]
+
+"""
+    get_forces!(::LumpedInterface)
+
+Compute the forces on the interface.
+"""
 function get_forces!(interface::LumpedInterface, t=sum(@views(interface.dt)); kwargs...)
     # compute nodal forces
     interface.forces .= 0 # reset the forces
@@ -144,11 +165,28 @@ function writeData!(interface::LumpedInterface)
         # revert the mesh
         interface.mesh = deepcopy(interface.mesh_store)
         # pop the flux and pressures
-        pop!(interface.dt); pop!(interface.Q); pop!(interface.P)
+        pop!(interface.dt); pop!(interface.V); pop!(interface.P)
         # revert state of ODE solver
-        !isnothing(interface.integrator) && pop!(interface.sol)
-        !isnothing(interface.integrator) && SciMLBase.set_ut!(interface.integrator, interface.u₀[2], interface.u₀[1])
+        if !isnothing(interface.integrator)
+            pop!(interface.sol)
+            SciMLBase.set_ut!(interface.integrator, interface.u₀[2], interface.u₀[1])
+        end
     end
+end
+
+# volume computation for lumped interface, needs to switch signs for correct contributions
+function volume(a::LumpedInterface)
+    vol = zeros(SVector{3,Float64})
+    max_id = getindex(maximum(a.srf_id),1)
+    mn,mx = getindex.(extrema(a.srf_id),1)
+    Np = (mx-2)/2
+    srf = vcat(collect(1:Np+1),collect(2Np+2:3Np+2)) # inner surfaces only
+    for (i,T) in enumerate(a.mesh)
+        id = getindex(a.srf_id[i],1)
+        sgn = ifelse(id ≤ max_id÷2, 1, -1)
+        id ∈ srf && (vol += sgn .* WaterLilyPreCICE.center(T) .* WaterLilyPreCICE.dS(T))
+    end
+    return sum(vol)/3
 end
 
 import WaterLily

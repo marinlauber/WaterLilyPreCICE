@@ -39,13 +39,29 @@ run `Calculix`
 ccx_preCICE -i calculix -bg -precice-participant Calculix
 ```
 
-## General approach
+## Approach
 
-The approach we have to use to couple a structural solver with `WaterLily.jl` using `preCICE` is different from what you would do with classical ALE methods. Since `WaterLily.jl` is an immersed-boundary solver, there is no interface mesh readily available in the fluid solver. We follow two approaches in this package; the first one is to read the mesh as triangulated surfaces and use the `preCICE` adapter to couple this mesh to whatever type of mesh is used in the structural solver. The second approach, which can only be used from `CalculiX` and `G+Smo` coupling is to use `preCICE` to communicate that interface mesh directly from the structural solver to the fluid solver.
+The approach we have to use to couple a structural solver with `WaterLily.jl` using `preCICE` is different from what you would do with classical ALE methods. Since `WaterLily.jl` is an immersed-boundary solver, there is no interface mesh readily available in the fluid solver. We follow two approaches in this package; the first one is to read the mesh as triangulated surfaces and use the `preCICE` adapter to couple this mesh to whatever type of mesh is used in the structural solver. The second approach, which can only be used if we couple to `CalculiX` or `G+Smo` is to use `preCICE` to communicate that interface mesh directly from the structural solver to the fluid solver. The limitation to this is that only 
 
-### Coupling to another structural solver
+#### General coupling
 
+For example, in the following figure, the left side represent the surface mesh required in `WaterLily.jl` and the right side the 3D mesh required in the structural solver. `WaterLily` uses this surface mesh to immerse the geometry and compute the forces on the faces of these elements. These forces are then passed to the structural solver (in this case [CalculiX](https://www.calculix.de/)). Here, we can use a nearest neighbor interpolation in the coupling since there is an exact correspondence between nodes/elements ion the two solvers.
 
+ Surface mesh              |  3D mesh
+:-------------------------:|:-------------------------:
+![](assets/surface.png)    |  ![](assets/geometry.png)
+
+This is the preferred approach if you structural problem is 3D (not a shell/membrane). 
+
+> **_NOTE:_** 
+Ths approach is also the one you want to be using to couple
+
+#### Communicating mesh internally
+
+If you structural problem consist of membrane/shells and you are using `CalculiC` or `G+Smo`m you can directly read the mesh information from the other participant.
+
+<!-- > **_💡 Tip:_** -->
+<!-- tiptip -->
 
 ## Examples
 

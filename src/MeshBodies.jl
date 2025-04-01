@@ -237,9 +237,14 @@ function get_p(tri::GeometryBasics.Ngon{3},p::AbstractArray{T,3},δ,::Val{false}
     c=center(tri);n=normal(tri);ar=area(tri);
     ar.*n.*(interp(c.+1.5 .+ δ.*n, p) .- interp(c.+1.5 .- δ.*n, p))
 end
+
+@inbounds @inline normal2D(tri::GeometryBasics.Ngon{3})=  SVector{2}(normal(tri)[1:2])
+@inbounds @inline center2D(tri::GeometryBasics.Ngon{3}) = SVector{2}(center(tri)[1:2])
+
 function get_p(tri::GeometryBasics.Ngon{3},p::AbstractArray{T,2},δ,::Val{true}) where T
-    c=center(tri)[1:2];n=normal(tri)[1:2];ar=area(tri);
-    ar.*n.*interp(c.+1.5 .+ δ.*n, p)
+    c=center2D(tri);n=normal2D(tri);ar=area(tri);
+    p = ar.*n.*interp(c.+1.5 .+ δ.*n, p)
+    return SA[p[1],p[2],zero(T)]
 end
 forces(a::GeometryBasics.Mesh, flow::Flow, δ=2, boundary=Val{true}()) = map(T->get_p(T, flow.p, δ, boundary), a)
 forces(body::MeshBody, b::Flow, δ=2) = forces(body.mesh, b, δ, Val{body.boundary}())

@@ -20,6 +20,10 @@ include("MeshBodies.jl")
 export MeshBody
 @reexport using GeometryBasics
 
+# multiple bodies
+include("Bodies.jl")
+export CombinedBodies,add_bodies
+
 # include the KDTree
 include("KDTree.jl")
 export KDTree,Bbox
@@ -60,19 +64,19 @@ Constructor for a WaterLily.Simulation that uses PreCICE for coupling with Calcu
 """
 function CoupledSimulation(args...; T=Float64, mem=Array, interface=:Interface, # WL specific
                            surface_mesh="geom.inp", scale=1.f0, # CalculiX specific
-                           boundary=true, thickness=0f0, center=0.0, 
-                           curve_dir=nothing, passive_bodies=nothing, # Gismo specific
+                           boundary=true, thickness=0f0, center=0.0, passive_bodies=nothing, # general
+                           curve_dir=nothing,  # Gismo specific
                            func=(i,t)->0, prob=nothing, # Lumped specific
                            kwargs...) # args and kwargs are passed to Simulation
 
     # check that the interface is constructed correctly
-    @assert !(:map in keys(kwargs)) "The `map` keyword argument is not allowed in the `CoupledSimulation` constructor"
+    @assert !(:map in keys(kwargs)) "The `map` keyword argument is not allowed in the `CoupledSimulation` constructor, instead we use `center::SVector`"
     @assert interface in [:Interface,:CalculiXInterface,
                           :GismoInterface,:LumpedInterface] "The interface specified does not exist"
     if interface==:GismoInterface
         @assert length(args[1])==2 "3D simulations are not support for Gismo coupling"
-    elseif interface==:CalculiXInterface
-        length(args[1])==2 && @warn("\nThe CalculiX interface assumes that 2D simulation happen in the x-y plane and that\n"*
+    elseif interface in [:Interface,:CalculiXInterface]
+        length(args[1])==2 && @warn("\nThe Interface/CalculiXInterface assumes that 2D simulation happen in the x-y plane and that\n"*
                                     "the z coordinate is zero. If this is not the case, the interface will not work as expected.")
     end
 

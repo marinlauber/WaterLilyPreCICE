@@ -13,28 +13,29 @@ functions is done on the `mesure` function, and not before.
 The operators vector `ops` specifies the operation to call between two consecutive `AutoBody`s in the `bodies` vector.
 Note that `+` (or the alias `∪`) is the only operation supported between `Bodies`.
 """
-struct AbsBodies <: AbstractBody
+struct CombinedBodies <: AbstractBody
     bodies::Vector{AbstractBody}
     ops::Vector{Function}
-    function AbsBodies(bodies, ops::AbstractVector)
+    function CombinedBodies(bodies, ops::AbstractVector)
         all(x -> x==Base.:+ || x==Base.:- || x==Base.:∩ || x==Base.:∪, ops) &&
             ArgumentError("Operations array `ops` not supported. Use only `ops ∈ [+,-,∩,∪]`")
         length(bodies) != length(ops)+1 && ArgumentError("length(bodies) != length(ops)+1")
         new(bodies,ops)
     end
 end
-AbsBodies(bodies) = AbsBodies(bodies,repeat([+],length(bodies)-1))
-AbsBodies(bodies, op::Function) = AbsBodies(bodies,repeat([op],length(bodies)-1))
-Base.:+(a::AbsBodies, b::AbsBodies) = AbsBodies(vcat(a.bodies, b.bodies), vcat(a.ops, b.ops))
-Base.:∪(a::AbsBodies, b::AbsBodies) = a+b
-Base.copy(b::AbsBodies) = AbsBodies(copy(b.bodies),copy(b.ops))
-
+CombinedBodies(bodies) = CombinedBodies(bodies,repeat([+],length(bodies)-1))
+CombinedBodies(bodies, op::Function) = CombinedBodies(bodies,repeat([op],length(bodies)-1))
+Base.:+(a::CombinedBodies, b::CombinedBodies) = CombinedBodies(vcat(a.bodies, b.bodies), vcat(a.ops, b.ops))
+Base.:∪(a::CombinedBodies, b::CombinedBodies) = a+b
+Base.copy(b::CombinedBodies) = CombinedBodies(copy(b.bodies),copy(b.ops))
+# we assume that if the preoperty doesn't belong to the `CombinedBodies` object, it belongs to the first `AbstractBody` object
+Base.getproperty(b::CombinedBodies, s::Symbol) = s in propertynames(b) ? getfield(b, s) : getfield(b.bodies[1], s)
 """
     d = sdf(a::Bodies,x,t)
 
 Computes distance for `Bodies` type.
 """
-function sdf(b::AbsBodies,x,t;kwargs...)
+function sdf(b::CombinedBodies,x,t;kwargs...)
     d₁ = sdf(b.bodies[1],x,t;kwargs...)
     for i in 2:length(b.bodies)
         d₁ = reduce_d(d₁,sdf(b.bodies[i],x,t;kwargs...),b.ops[i-1])
@@ -62,7 +63,7 @@ The gradient of `d=sdf(map(x,t))` is used to improve `d` for pseudo-sdfs.
 The velocity is determined _solely_ from the optional `map` function.
 Skips the `n,V` calculation when `d²>fastd²`.
 """
-function measure(body::AbsBodies,x,t;fastd²=Inf)
+function measure(body::CombinedBodies,x,t;fastd²=Inf)
     d,n,V = measure(body.bodies[1],x,t;fastd²)
     for i in 2:length(body.bodies)
         dᵢ,nᵢ,Vᵢ = measure(body.bodies[i],x,t;fastd²)
@@ -80,4 +81,14 @@ function reduce_bodies(d₁,n₁,v₁,d₂,n₂,v₂,op)
     Base.:- == op && d₁ < -d₂ && return (-d₂,-n₂,v₂) # velocity is not inverted
     Base.:∩ == op && d₁ < d₂ && return (d₂,n₂,v₂)
     return d₁,n₁,v₁
+end
+
+add_bodies(body::AbstractBody, ::Nothing) = body
+function add_bodies(body::AbstractBody, passive_bodies::Vector)
+    bodies = AbstractBody[body]; ops = Function[]
+    for crv in passive_bodies
+        push!(bodies,crv); push!(ops, ∪) # always union with the next curve
+        println("Adding body of type $(typeof(crv)) to the coupling surface...")
+    end
+    return CombinedBodies(bodies, ops)
 end

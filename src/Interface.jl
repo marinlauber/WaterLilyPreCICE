@@ -11,7 +11,7 @@ struct Interface <: AbstractInterface
     write_data      :: String
 end
 
-function Interface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, boundary=true, thk=0, 
+function Interface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, boundary=true, thk=0, passive_bodies=nothing,
                     rw_mesh="Fluid-Mesh", read_data="Displacements", write_data="Forces", kwargs...)  
     
     # load the file
@@ -47,6 +47,9 @@ function Interface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, bou
     # initilise PreCICE
     PreCICE.initialize()
     dt = PreCICE.getMaxTimeStepSize()
+
+    # add some passive_bodies if we need
+    body = add_bodies(body, passive_bodies)
     
     # return coupling interface
     interface = Interface(ControlPointsID, forces, deformation, map_id, [dt], rw_mesh, read_data, write_data)
@@ -66,12 +69,17 @@ function update!(interface::S, sim::CoupledSimulation; kwargs...) where S<:Inter
         push!(points, Point3f(SA[pnt.data...] .+ sim.body.scale.*interface.deformation[i,:]))
     end
     # update
-    sim.body.mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(sim.body.mesh))
+    set!(sim.body, GeometryBasics.Mesh(points,GeometryBasics.faces(sim.body.mesh)))
     bbox = Rect(points)
-    sim.body.bbox = Rect(bbox.origin.-max(4,2sim.body.half_thk),bbox.widths.+max(8,4sim.body.half_thk))
+    set!(sim.body, Rect(bbox.origin.-max(4,2sim.body.half_thk),bbox.widths.+max(8,4sim.body.half_thk)))
 end
+set!(a::CombinedBodies, b) = set!(a.bodies[1], b)
+set!(a::MeshBody, b::Mesh) = a.mesh = b
+set!(a::MeshBody, b::Rect) = a.bbox = b
 
 import WaterLily: interp
+get_forces!(interface::S, flow::Flow, body::CombinedBodies; δ=1.f0, kwargs...) where S<:Interface = 
+            get_forces!(interface, flow, body.bodies[1]; δ, kwargs...)
 function get_forces!(interface::S, flow::Flow, body::MeshBody; δ=1.f0, kwargs...) where S<:Interface
     t = sum(@views(interface.dt[1:end])) # the time
     interface.forces .= 0 # reset the forces

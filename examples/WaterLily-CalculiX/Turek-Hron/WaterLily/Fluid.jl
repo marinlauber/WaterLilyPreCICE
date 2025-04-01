@@ -7,14 +7,22 @@ vtk_body(a::AbstractSimulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.tim
 custom_attrib = Dict("u"=>vtk_velocity, "p"=>vtk_pressure, "d"=>vtk_body)
 
 # make the sim
-L,Re,U = 64,1000,1
-sim = CoupledSimulation((10L,4L), (U,0,0), L; ν=U*L/Re, perdir=(3,),
+L,Re,U = 128,1000,1
+R = 0.1L/0.41 # radius
+# velocity profile of Turek Hron
+function uBC(i,x::SVector{N,T},t) where {N,T}
+    i ≠ 1 && return convert(T, 0.0)
+    return convert(T, 1.5*U*(x[2]/L)*(1.0-x[2]/L)/0.5^2)
+end
+# make a sim
+sim = CoupledSimulation((6L,L), uBC, R; U, ν=U*R/Re, exitBC=true,
                          surface_mesh=joinpath(@__DIR__,"../CalculiX/surface.inp"),
-                         scale=L,center=SA[L/2,L,0])
+                         passive_bodies=[AutoBody((x,t)->L/2-abs(x[2]-L/2)-1.5)], # wall at ±L/2
+                         scale=R,center=SA[0.2L/0.41,0.2L/0.41,0])
 
 # make the paraview writer
 wr = vtkWriter("Turek-Hron";attrib=custom_attrib)
-
+write!(wr, sim)
 let
     while PreCICE.isCouplingOngoing()
 

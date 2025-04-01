@@ -3,8 +3,8 @@
 *INCLUDE, INPUT=interface.nam
 
 *BOUNDARY
- Nfixed, 1, 6, 0.0
- Ninterface, 3, 3, 0.0
+ Nall, 1, 6, 0.0
+**  Ninterface, 3, 3, 0.0
 
 ** units are in [m, kg, s], so Pre = kg/(m*S^2) = 1 N/m^2 [Pa]
 *MATERIAL,NAME=RUBBER
