@@ -18,9 +18,9 @@
  0.1, 50.
 
 *CLOAD
- Ninterface, 1, 1, 0.0
- Ninterface, 2, 2, 0.0
- Ninterface, 3, 3, 0.0
+ Ninterface, 1, 0.0
+ Ninterface, 2, 0.0
+ Ninterface, 3, 0.0
 *NODE FILE,OUTPUT=2D,FREQUENCY=1
  U, 
 *EL FILE

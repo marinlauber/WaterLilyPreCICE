@@ -12,7 +12,7 @@ R = 0.1L/0.41 # radius
 # velocity profile of Turek Hron
 function uBC(i,x::SVector{N,T},t) where {N,T}
     i ≠ 1 && return convert(T, 0.0)
-    return convert(T, 1.5*U*(x[2]/L)*(1.0-x[2]/L)/0.5^2)
+    return convert(T, 6*U*(x[2]/(L-3)-(x[2]/(L-3))^2))
 end
 # make a sim
 sim = CoupledSimulation((6L,L), uBC, R; U, ν=U*R/Re, exitBC=true,
@@ -36,13 +36,13 @@ let
         # write data to the other participant
         writeData!(sim)
 
-        println("WaterLily: Time=",round(WaterLily.time(sim.flow),digits=4),
+        println("WaterLily: Time=",round(sim_time(sim),digits=4),
                            ", Δt=",round(sim.flow.Δt[end],digits=3))
         
         # if we have converged, save if required
         if PreCICE.isTimeWindowComplete()
-            # save the data
-            length(sim.flow.Δt)%5==0 && write!(wr, sim)
+            # save the data 4 times per convectie time
+            sim_time(sim)%0.25==0 && write!(wr, sim)
         end
     end
     close(wr)

@@ -102,30 +102,74 @@ wr = vtkWriter("pouch"; attrib=custom)
 write!(wr,interface)
 v = []; p = []; t = []; Qs = [] # storage for the volume
 
+global iteration = 1
+
+#@TODO, I know this from the inital conditions, but I should get it from the interface
+global target_vol = 0.10136861655795992
+global old_P = 0.0
+
 while PreCICE.isCouplingOngoing()
 
     # read the data from the other participant
     readData!(interface) # sets sum(Δt) = t+Δt
     @show sum(interface.deformation,dims=1)
+        
+    # @TODO pressure perturbation
+    # check what iteration we are in, first one we perturb the pressure and the use the normal on
+    # if iteration==1
+        # println("iteration 1, perturbing the pressure")
+        # push!(interface.P, 0.25*A1(sum(interface.Δt))) # 0.35kPa ventricular pressure
+    # else
+        # println("iteration > 1, using the correct pressure")
+        # push!(interface.P, 0.21*A1(sum(interface.Δt))) # 0.35kPa ventricular pressure
+    # end
+
+    # @TODO constant flow inside the ventricle
+    Cp = 1/100.
+    vol = WaterLilyPreCICE.volume(interface)
+    @show target_vol, vol
     
-    # compute the pressure forces
-    push!(interface.P, 0.21*A5(sum(interface.Δt))) # 0.35kPa time varying
+    # how much we need to change the pressure
+    new_P = old_P + Cp*(target_vol - vol)
+
+    # first ever iteration the volume is unknown yet, we simply prescribe a pressure
+    if iteration==1
+        new_P = 0.21*A1(sum(interface.Δt))
+    end
+    push!(interface.P, new_P)
+    
+    #@TODO classic constant pressure inflation
+    # push!(interface.P, 0.21*A1(sum(interface.Δt))) # 0.35kPa ventricular pressure
     @show sum(interface.Δt), interface.P[end]
+    @show new_P - old_P
+    # @show interface.P[end] - old_P
+ 
+    
+    # update the ODEs, compute the forces on the mesh
     WaterLilyPreCICE.update!(interface; integrate=false)
     @show sum(interface.forces,dims=1)
     push!(interface.sol, [1,1,1]) # prevents the solver from crashing
 
-    # write data to the other participant
+    # write data to the other participant and advance the coupling
     writeData!(interface)
+    global iteration += 1
+    # global target_vol = vol
+    global old_P = new_P
 
     # if we have converged, save if required
     if PreCICE.isTimeWindowComplete()
-        (length(interface.Δt)+1)%10==0 && write!(wr,interface)
+
+        global target_vol = target_vol + interface.Δt[end]*0.05/10 # flow rate desired to reach 0.05/10
+
+        # global iteration = 1
+        # (length(interface.Δt)+1)%1==0 && 
+        write!(wr,interface)
          # some post-processing stuff
         push!(v, WaterLilyPreCICE.volume(interface))
         push!(p, A4(sum(interface.Δt)))
         push!(t, sum(interface.Δt))
         push!(Qs, WaterLilyPreCICE.get_Q(interface))
+        println("")
         # save everytime so we avoid not having data
         jldsave("pouch_volume.jld2";volume=v,pressure=p,time=t,q=Qs,sol=interface.sol,
                                     intP=interface.P,intdt=interface.Δt,intV=interface.V)

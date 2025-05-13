@@ -3,33 +3,40 @@
 *BOUNDARY
  3, 1, 3, 0.0
 
-** units are in mm, so MPa = 1 N/mm^2 = 1e3 N/cm^2 [kPa] = 1e6 N/m^2 [Pa]
-** 3kPa = 0.003 MPa = 0.003 N/mm^2
+** *AMPLITUDE, NAME=A1
+** 0.0,0.0,1.0,1.0
+
+** units are in [μm, g, s], so Pre = g/(μm*S^2) = 1e-3 N/m^2 [Pa]
+** 3kPa = 3000 Pa = 3.0 g/(μm*s^2)
 *MATERIAL,NAME=RUBBER
 ** *HYPERELASTIC, NEO HOOKE
-**  0.003000, 0.00000066
+**  3.0, 0.00066
 *ELASTIC
- 0.003, 0.33
+ 3.0, 0.33
+** density is in g/μm^3, so 1e-12 g/μm^3 = 1000 kg/m^3
 *DENSITY
- 1E-9
-*DAMPING, ALPHA=100.00, BETA=0.00
+ 0.0001
+*DAMPING, ALPHA=1.00, BETA=0.00
 
-*SHELL SECTION, MATERIAL=RUBBER, ELSET=SHELL, OFFSET=-0.5
- 0.0025
+** length are in μm
+*SHELL SECTION, MATERIAL=RUBBER, ELSET=SHELL
+ 0.25
 
 *STEP,NLGEOM,INC=100000
-** *STATIC,DIRECT
-*DYNAMIC, APLPHA=-0.3
- 0.0001, 1
+** *DYNAMIC
+**  0.01, 1., 0.001, 0.1
+*STATIC
+ 0.1, 1.0, 0.1, 0.1
+**  0.05, 1.0, 0.001, 0.1
 
-** pressures are also in MPA
+** pressures are also in 0.8 mmHg ~ 100 Pa  = 100 * 1e-3 g/(μm*s^2)
 ** *DLOAD
-**  SHELL, P1, 0.0002
+**  SHELL, P1, 0.01
 
 *CLOAD
- Ninterface, 1, 1, 0.0
- Ninterface, 2, 2, 0.0
- Ninterface, 3, 3, 0.0
+ Ninterface, 1, 0.0
+ Ninterface, 2, 0.0
+ Ninterface, 3, 0.0
 
 *NODE FILE,FREQUENCY=1
  U
