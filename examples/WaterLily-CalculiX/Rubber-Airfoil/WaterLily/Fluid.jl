@@ -24,6 +24,7 @@ let
         # update the this participant and scale forces
         sim_step!(sim); sim.int.forces .*= 2sim.U^2/sim.L
         sim.int.forces[:,3] .= 0.0 # zero-spanwise forces 
+        # sim.int.forces[:,2] .= min(sim_time(sim)/2,1)*0.02
        
         # write data to the other participant
         writeData!(sim)

@@ -52,7 +52,7 @@
   </coupling-scheme:serial-explicit> -->
 
   <coupling-scheme:parallel-implicit>
-    <participants first="WaterLily" second="Calculix"/>
+    <participants first="Calculix" second="WaterLily"/>
     <max-time value="1.0" />
     <time-window-size value="0.01" />
     <max-iterations value="10"/>
