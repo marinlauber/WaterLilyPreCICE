@@ -50,19 +50,19 @@ Emin = 0.05   # mmHg/ml
 HR = 60       # heart rate in beats/min
 
 # this are the loading curves inside CalculiX
-A1 = linear_interpolation([0.,10.,100], [0.,1.,1.])
-A2 = linear_interpolation([0.,10.,100.], [0.,0.,10.])
-A3 = linear_interpolation([0.,10.,100.], [0.,1.,-9.])
-A4(ts) = ts<=10 ? 0 : 2Gaussian((ts-10)/20;μ=0.35,σ=0.08) #Elastance((ts-10)/20)
-A5(ts) = ts<=10 ? ts/10 : A1(ts) - 2Gaussian((ts-10)/20;μ=0.35,σ=0.08) #Elastance((ts-10)/20)
+A1 = linear_interpolation([0.,5.,100], [0.,1.,1.])
+A2 = linear_interpolation([0.,5.,100.], [0.,0.,10.])
+A3 = linear_interpolation([0.,5.,100.], [0.,1.,-9.])
+A4(ts) = ts<=5 ? 0 : 2Gaussian((ts-5)/20;μ=0.35,σ=0.08) #Elastance((ts-10)/20)
+A5(ts) = ts<=5 ? ts/5 : A1(ts) - 2Gaussian((ts-5)/20;μ=0.35,σ=0.08) #Elastance((ts-10)/20)
 
 function static_inflation(i,t,interface)
     i==1 && return  0.35*A1(t)
     i==6 && return -0.35*A1(t)
-    i in [2,3] && return 0.35*A5(t)
-    i in [4,5] && return 0.35*A4(t)
-    i in [7,8] && return  -0.35*A5(t)
-    i in [9,10] && return -0.35*A4(t)
+    i in [2,3] && return 0.35*A5(t) # 0.38*A3(t)
+    i in [4,5] && return 0.35*A4(t) # 0.38*A2(t)
+    i in [7,8] && return  -0.35*A5(t) # -0.38*A3(t)
+    i in [9,10] && return -0.35*A4(t) # -0.38*A2(t) 
 end
 kPa2mmHg = 7.50062
 function dynamic_inflation(i,t,interface;mmHg2Kpa=0.133322,scale=12.5,Pa=0.35/(mmHg2Kpa*scale))
@@ -72,15 +72,6 @@ function dynamic_inflation(i,t,interface;mmHg2Kpa=0.133322,scale=12.5,Pa=0.35/(m
     i in [4,5] && return Pa*A4(t)*mmHg2Kpa*scale
     i in [7,8] && return  -(interface.P[end] - Pa*A4(t))*mmHg2Kpa*scale
     i in [9,10] && return -Pa*A4(t)*mmHg2Kpa*scale
-end
-
-function constant_pressure(i,t,interface;mmHg2Kpa=0.133322,scale=12.5,Pa=0.35/(mmHg2Kpa*scale))
-    i==1 && return  interface.P[end]*mmHg2Kpa*scale
-    i==6 && return -interface.P[end]*mmHg2Kpa*scale
-    i in [2,3] && return interface.P[end]*mmHg2Kpa*scale
-    i in [4,5] && return 0.0
-    i in [7,8] && return  -interface.P[end]*mmHg2Kpa*scale
-    i in [9,10] && return 0.0
 end
 
 no_inflation(args...) = 0.0
@@ -93,6 +84,7 @@ vtk_dS(a::LumpedInterface) = WaterLilyPreCICE.dS.(a.mesh)
 vtk_u(a::LumpedInterface) = a.deformation
 vtk_f(a::LumpedInterface) = a.forces
 vtk_vis(a::LumpedInterface) = Float32[ifelse(el[1] ∈ [1,6], 0, ifelse(el[1] ∈ [2,3,7,8], 1, 2)) for el in a.srf_id]
+# vtk_du(a::LumpedInterface) = 
 
 # vtk attributes
 custom = Dict("SRF" =>vtk_srf, "center"=>vtk_center, "normal"=>vtk_normal,
@@ -100,37 +92,86 @@ custom = Dict("SRF" =>vtk_srf, "center"=>vtk_center, "normal"=>vtk_normal,
 
 # coupling interface
 interface = LumpedInterface(surface_mesh="../Solid/geom.inp",
-                            func=constant_pressure,
+                            func=dynamic_inflation,
                             integrator=integrator)
-push!(interface.P, 0.21) # 0.35kPa
+
 WaterLilyPreCICE.get_forces!(interface) # since we restart in the FEA, we need to compute the forces
+interface.forces .= 0.0
 
 # make the writer
+run(`rm -rf vtk_data/ pouch.pvd`) #clean
 wr = vtkWriter("pouch"; attrib=custom)
+
 save!(wr,interface)
 v = []; p = []; t = []; Qs = [] # storage for the volume
+
+global iteration = 1
+
+# TODO, I know this from the inital conditions, but I should get it from the interface
+global target_vol = 0.10136861655795992
+pop!(interface.V) # remove the first volume
+push!(interface.V, target_vol) # add the target volume
+global old_P = 0.0
+
+global Ps = []
+global Vs = [] 
 
 while PreCICE.isCouplingOngoing()
 
     # read the data from the other participant
-    readData!(interface) # sets sum(Δt) = t+Δt
+    readData!(interface) # sets sum(Δt) = t+Δt, and updates mesh
+    vol = WaterLilyPreCICE.volume(interface)
+    push!(interface.V, vol)
+
+    # TODO start by a pressure ramp until we fill the ventricle to EDP
+    if sum(interface.Δt) < 5
+        new_P = 0.21*A1(sum(interface.Δt))
+    # we are in the isovolumetric contraction
+    else 
+        println("isovolumetric iteration")
+        # no flow inside the ventricle requires a large compliance
+        Cp = 1/100.
+        dVdt = sum(interface.V[end-2:end].*SA[1.,-4.,3.])/2interface.Δt[end] # this eventually goes to zero
+        dPdt = sum(interface.P[end-2:end].*SA[1.,-4.,3.])/2interface.Δt[end]
+        dPdV = dPdt*(inv(dVdt)+eps())
+        # Cp_test = diff(interface.P[end-1:end]) / diff(interface.V[end-1:end])
+        @show dPdV, Cp
+        # vol = WaterLilyPreCICE.volume(interface)
+        # how much we need to change the pressure
+        new_P = old_P + Cp*(target_vol - interface.V[end])
+    end
+    @show target_vol, vol
+    @show target_vol - vol
+    @show old_P, new_P
+    @show old_P - new_P
+    push!(interface.P, new_P)
    
-    # compute the pressure forces
-    push!(interface.P, 0.21) # 0.35kPa time varying
-    WaterLilyPreCICE.update!(interface; integrate=false)
+    # update the ODEs, compute the forces on the mesh
+    # WaterLilyPreCICE.update!(interface; integrate=false)
+    WaterLilyPreCICE.get_forces!(interface)
     push!(interface.sol, [1,1,1]) # prevents the solver from crashing
 
-    # write data to the other participant
+    # write data to the other participant and advance the coupling
     writeData!(interface)
+    global old_P = new_P
 
     # if we have converged, save if required
     if PreCICE.isTimeWindowComplete()
-        (length(interface.Δt)+1)%10==0 && save!(wr,interface)
+        # save every n step
+        (length(interface.Δt)+1)%10==1 && save!(wr,interface)
+
+        global target_vol = volume(interface) # we store every converged volumes
+        
+        # reset since we converged
+        global Ps = []
+        global Vs = [] 
+
          # some post-processing stuff
         push!(v, WaterLilyPreCICE.volume(interface))
         push!(p, A4(sum(interface.Δt)))
         push!(t, sum(interface.Δt))
         push!(Qs, WaterLilyPreCICE.get_Q(interface))
+        println("")
         # save everytime so we avoid not having data
         jldsave("pouch_volume.jld2";volume=v,pressure=p,time=t,q=Qs,sol=interface.sol,
                                     intP=interface.P,intdt=interface.Δt,intV=interface.V)

@@ -247,14 +247,14 @@ function get_p(tri::GeometryBasics.Ngon{3},p::AbstractArray{T,2},δ,::Val{true})
     return SA[p[1],p[2],zero(T)]
 end
 forces(a::GeometryBasics.Mesh, flow::Flow, δ=2, boundary=Val{true}()) = map(T->get_p(T, flow.p, δ, boundary), a)
-forces(body::MeshBody, b::Flow, δ=2) = forces(body.mesh, b, δ, Val{body.boundary}())
+forces(body::MeshBody, b::Flow; δ=2) = forces(body.mesh, b, δ, Val{body.boundary}())
 
 using Printf: @sprintf
 import WaterLily
 using WriteVTK
 
 # access the WaterLily writer to save the file
-function WaterLily.write!(w,a::MeshBody,t=w.count[1]) #where S<:AbstractSimulation{A,B,C,D,MeshBody}
+function WaterLily.save!(w,a::MeshBody,t=w.count[1]) #where S<:AbstractSimulation{A,B,C,D,MeshBody}
     k = w.count[1]
     points = hcat([[p.data...] for p ∈ a.mesh.position]...)
     cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, Base.to_index.(face)) for face in faces(a.mesh)]

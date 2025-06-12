@@ -19,23 +19,15 @@
     <use-data name="Forces"/>
   </mesh>
 
-  <mesh name="LPM-Nodes" dimensions="3">
-    <use-data name="Displacements"/>
-    <use-data name="Forces"/>
-  </mesh>
-
   <participant name="LPM">
-    <!-- <export:vtp every-n-time-windows="1" directory="vtp/" every-iteration="1"/> -->
-    <provide-mesh name="LPM-Nodes"/>
+    <export:vtp every-n-time-windows="1" directory="vtp/" every-iteration="1"/>
     <receive-mesh name="Solid-Nodes" from="Calculix"/>
-    <write-data name="Forces" mesh="LPM-Nodes"/>
-    <read-data  name="Displacements" mesh="LPM-Nodes"/>
-    <mapping:nearest-neighbor direction="write" from="LPM-Nodes" to="Solid-Nodes" constraint="conservative" />
-    <mapping:nearest-neighbor direction="read" from="Solid-Nodes" to="LPM-Nodes" constraint="conservative" />
+    <write-data name="Forces" mesh="Solid-Nodes"/>
+    <read-data  name="Displacements" mesh="Solid-Nodes"/>
   </participant>
 
   <participant name="Calculix">
-  <!-- <export:vtp every-n-time-windows="1" directory="vtp/" every-iteration="1"/> -->
+  <export:vtp every-n-time-windows="1" directory="vtp/" every-iteration="1"/>
     <provide-mesh name="Solid-Nodes"/>
     <write-data name="Displacements" mesh="Solid-Nodes"/>
     <read-data  name="Forces" mesh="Solid-Nodes"/>
@@ -43,18 +35,18 @@
 
   <m2n:sockets acceptor="LPM" connector="Calculix" exchange-directory=".."/>
 
-  <coupling-scheme:serial-explicit>
+  <!-- <coupling-scheme:serial-explicit>
     <participants first="Calculix" second="LPM"/>
     <max-time value="1.0" />
-    <time-window-size value="0.01"/>
+    <time-window-size value="0.1"/>
     <exchange data="Displacements" mesh="Solid-Nodes" from="Calculix" to="LPM" initialize="false"/>
     <exchange data="Forces" mesh="Solid-Nodes" from="LPM" to="Calculix" initialize="false"/>
-  </coupling-scheme:serial-explicit>
+  </coupling-scheme:serial-explicit> -->
 
-  <!-- <coupling-scheme:parallel-implicit>
-    <participants first="Calculix" second="LPM"/>
+  <coupling-scheme:parallel-implicit>
+    <participants first="LPM" second="Calculix"/>
     <max-time value="1.0" />
-    <time-window-size value="0.002" />
+    <time-window-size value="0.1" />
     <max-iterations value="50"/>
     <exchange data="Displacements" mesh="Solid-Nodes" from="Calculix" to="LPM" initialize="false"/>
     <exchange data="Forces" mesh="Solid-Nodes" from="LPM" to="Calculix" initialize="false"/>
@@ -69,6 +61,6 @@
       <max-used-iterations value="50"/>
       <time-windows-reused value="10"/>
     </acceleration:IQN-ILS>
-  </coupling-scheme:parallel-implicit> -->
+  </coupling-scheme:parallel-implicit>
   
 </precice-configuration>

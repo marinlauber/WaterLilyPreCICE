@@ -21,12 +21,11 @@ Then, you can use the package in your julia scripts:
 using WaterLilyPreCICE
 ```
 
-Running the different solvers
+Running the `Julia`` solvers with 
 
 run `Julia`
 ```bash
-julia --project=../../ Fluid.jl ../precice-config.xml
-# preCICEJulia --project=/home/marin/Workspace/WaterLilyPreCICE/examples Fluid.jl precice-config.xml
+julia --project=../../../ Fluid.jl ../precice-config.xml
 ```
 
 run `G+Smo`
@@ -80,12 +79,47 @@ This does not sound like a good idea, but it can actually help with gust mitigat
 ![](assets/rubber-airfoil.gif)
 
 
-### Turek-Hron with G+Smo
+### Turek-Hron FSI benchmark
 
-...
+A parabolic velocity profile is prescribed atr the left channel inlet
+```math
+u(0,y) = 1.5\bar{U}\,\frac{y(H-y)}{(\frac{H}{2})^2} = 6\bar{U}\left(\frac{y}{H}-\left(\frac{y}{H}\right)^2\right)
+```
+where $\bar{U}$ is the mean velocity in the channel. This profile is applied with a smnooth ramp in time
+```math
+u(t,0,y) = \begin{cases} u(0,y)\frac{1-\cos(\pi t/2)}{2}, & \text{if} \quad t < 2\\
+u(0,y) & \text{otherwise}
+\end{cases}
+```
+
+The channel and the immersed geometry have the following dimensions:
+
+The channel and the immersed geometry have the following dimensions:
+
+| Geometry Parameters         | Symbol | Value [m]  |
+|-----------------------------|--------|------------|
+| Channel Length              | $L$    | 2.5        |
+| Channel Width               | $H$    | 0.41       |
+| Cylinder Center Position    | $C$    | (0.2, 0.2) |
+| Cylinder Radius             | $r$    | 0.05       |
+| Elastic Structure Length    | $l$    | 0.35       |
+| Elastic Structure Thickness | $h$    | 0.02       |
+| Reference Point (at $t = 0$)| $A$    | (0.6, 0.2) |
+| Reference Point             | $B$    | (0.2, 0.2) |
+
+
+The FSI cases have the following parameters, see [here](https://wwwold.mathematik.tu-dortmund.de/lsiii/cms/papers/TurekHron2006.pdf)
+
+| Parameter                       | FSI 1           | FSI 2           | FSI 3           |
+|---------------------------------|-----------------|-----------------|-----------------|
+| $\nu_s$                         | 0.4             | 0.4             | 0.4             |
+| $\beta=\frac{\rho_s}{\rho_f}$   | 1               | 10              | 1               |
+| $Ae=\frac{E}{\rho_f \bar{U}^2}$ | $3.5\times10^4$ | $1.4\times10^3$ | $1.4\times10^3$ |
+| $Re =\frac{\bar{U}d}{\nu_f} $   | 20              | 100             | 200             |
 
 ![](assets/turek-hron.gif)
 
+...
 
 <!-- ### Lumped model interface -->
 

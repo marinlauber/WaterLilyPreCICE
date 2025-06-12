@@ -213,7 +213,7 @@ function volume(a::LumpedInterface)
 end
 
 import WaterLily
-function WaterLily.write!(w,a::LumpedInterface)
+function WaterLily.save!(w,a::LumpedInterface)
     k = w.count[1]
     points = hcat([[p.data...] for p ∈ a.mesh0.position]...)
     cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, Base.to_index.(face)) for face in faces(a.mesh0)]

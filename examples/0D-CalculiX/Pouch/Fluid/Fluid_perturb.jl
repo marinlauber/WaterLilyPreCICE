@@ -99,7 +99,7 @@ interface.forces .= 0.0
 
 # make the writer
 wr = vtkWriter("pouch"; attrib=custom)
-write!(wr,interface)
+save!(wr,interface)
 v = []; p = []; t = []; Qs = [] # storage for the volume
 
 global iteration = 1
@@ -125,7 +125,7 @@ while PreCICE.isCouplingOngoing()
     # end
 
     # @TODO constant flow inside the ventricle
-    Cp = 1/100.
+    Cp = 1/50.
     vol = WaterLilyPreCICE.volume(interface)
     @show target_vol, vol
     
@@ -163,7 +163,7 @@ while PreCICE.isCouplingOngoing()
 
         # global iteration = 1
         # (length(interface.Δt)+1)%1==0 && 
-        write!(wr,interface)
+        save!(wr,interface)
          # some post-processing stuff
         push!(v, WaterLilyPreCICE.volume(interface))
         push!(p, A4(sum(interface.Δt)))

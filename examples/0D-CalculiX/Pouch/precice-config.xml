@@ -44,8 +44,8 @@
 
   <coupling-scheme:parallel-implicit>
     <participants first="Calculix" second="LPM"/>
-    <max-time value="10.0" />
-    <time-window-size value="0.02"/>
+    <max-time value="20.0" />
+    <time-window-size value="0.01"/>
     <exchange data="Displacements" mesh="Solid-Nodes" from="Calculix" to="LPM"/>
     <exchange data="Forces" mesh="Solid-Nodes" from="LPM" to="Calculix"/>
     <max-iterations value="10"/>

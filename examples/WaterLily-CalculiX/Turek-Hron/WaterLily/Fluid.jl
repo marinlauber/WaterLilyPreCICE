@@ -4,7 +4,8 @@ using WaterLilyPreCICE,StaticArrays,WriteVTK
 vtk_velocity(a::AbstractSimulation) = a.flow.u |> Array;
 vtk_pressure(a::AbstractSimulation) = a.flow.p |> Array;
 vtk_body(a::AbstractSimulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a.flow)); a.flow.σ |> Array;)
-custom_attrib = Dict("u"=>vtk_velocity, "p"=>vtk_pressure, "d"=>vtk_body)
+vtk_ω(a::AbstractSimulation) = (@inside a.flow.σ[I] = WaterLily.curl(3,I,a.flow.u); a.flow.σ |> Array;)
+custom_attrib = Dict("u"=>vtk_velocity, "p"=>vtk_pressure, "d"=>vtk_body, "ω₃"=>vtk_ω)
 
 # make the sim
 L,Re,U = 128,1000,1
@@ -12,40 +13,38 @@ R = 0.1L/0.41 # radius
 # velocity profile of Turek Hron
 function uBC(i,x::SVector{N,T},t) where {N,T}
     i ≠ 1 && return convert(T, 0.0)
-    return convert(T, 6*U*(x[2]/(L-3)-(x[2]/(L-3))^2))
+    # make sure we have no velocity outside the channel
+    return max(convert(T, 1.5*U*((x[2]-1.5f0)/(L-3))*(1.0-(x[2]-1.5f0)/(L-3))/0.5^2), 0.f0)
 end
 # make a sim
 sim = CoupledSimulation((6L,L), uBC, R; U, ν=U*R/Re, exitBC=true,
                          surface_mesh=joinpath(@__DIR__,"../CalculiX/surface.inp"),
-                         passive_bodies=[AutoBody((x,t)->L/2-abs(x[2]-L/2)-1.5)], # wall at ±L/2
+                         passive_bodies=[AutoBody((x,t)->L/2-abs(x[2]-L/2.f0)-1.5f0)], # wall at ±L/2
                          scale=R,center=SA[0.2L/0.41,0.2L/0.41,0])
 
 # make the paraview writer
 wr = vtkWriter("Turek-Hron";attrib=custom_attrib)
-write!(wr, sim)
-let
-    while PreCICE.isCouplingOngoing()
+save!(wr, sim)
 
-        # read the data from the other participant
-        readData!(sim)
+# integrate in time
+while PreCICE.isCouplingOngoing()
 
-        # update the this participant and scale forces
-        sim_step!(sim); sim.int.forces .*= 2sim.U^2/sim.L
-        sim.int.forces[:,3] .= 0.0 # zero-spanwise forces 
-       
-        # write data to the other participant
-        writeData!(sim)
+    # read the data from the other participant
+    readData!(sim)
 
-        println("WaterLily: Time=",round(sim_time(sim),digits=4),
-                           ", Δt=",round(sim.flow.Δt[end],digits=3))
-        
-        # if we have converged, save if required
-        if PreCICE.isTimeWindowComplete()
-            # save the data 4 times per convectie time
-            sim_time(sim)%0.25==0 && write!(wr, sim)
-        end
+    # update the this participant and scale forces
+    sim_step!(sim); sim.int.forces .*= sim.U^2/2sim.L
+    sim.int.forces[:,:] .= 0.0 # zero-spanwise forces
+            
+    # write data to the other participant
+    writeData!(sim)
+    
+    # if we have converged, save if required
+    if PreCICE.isTimeWindowComplete()
+        # save the data 4 times per convectie time
+        length(sim.flow.Δt)%400==0 && save!(wr, sim)
     end
-    close(wr)
 end
+close(wr)
 PreCICE.finalize()  
 println("WaterLily: Closing Julia solver...")

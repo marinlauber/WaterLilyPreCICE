@@ -30,6 +30,7 @@ Base.:∪(a::CombinedBodies, b::CombinedBodies) = a+b
 Base.copy(b::CombinedBodies) = CombinedBodies(copy(b.bodies),copy(b.ops))
 # we assume that if the preoperty doesn't belong to the `CombinedBodies` object, it belongs to the first `AbstractBody` object
 Base.getproperty(b::CombinedBodies, s::Symbol) = s in propertynames(b) ? getfield(b, s) : getfield(b.bodies[1], s)
+Base.getindex(b::CombinedBodies, i::Int) = b.bodies[i]
 """
     d = sdf(a::Bodies,x,t)
 
