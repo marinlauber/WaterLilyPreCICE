@@ -25,7 +25,7 @@ function MeshBody(fname::String;map=(x,t)->x,scale=1.0,thk=0f0,boundary=true,T=F
     return MeshBody(mesh0,srf_id,map,scale,thk,boundary,T)
 end
 MeshBody(mesh::M;map=(x,t)->x,scale=1.0,thk=0f0,boundary=true,T=Float32) where M<:GeometryBasics.Mesh = 
-        MeshBody(mesh,ntuple(i->(1,i),length(mesh)),map,scale,thk,boundary,T)
+         MeshBody(mesh,ntuple(i->(1,i),length(mesh)),map,scale,thk,boundary,T)
 function MeshBody(mesh0::M,srf_id,map,scale,thk,boundary,T) where M<:GeometryBasics.Mesh
     points = Point3f[] # scale and map the points to the corrcet location
     for (i,pnt) in enumerate(mesh0.position)
@@ -33,9 +33,10 @@ function MeshBody(mesh0::M,srf_id,map,scale,thk,boundary,T) where M<:GeometryBas
     end
     mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(mesh0))
     velocity = GeometryBasics.Mesh(zero(points),GeometryBasics.faces(mesh0))
+    # bbox is some kind of locator
     bbox = Rect(mesh.position)
     bbox = Rect(bbox.origin.-max(4,thk),bbox.widths.+max(8,2thk))
-    return MeshBody(mesh,mesh0,velocity,srf_id,map,bbox,T(scale),T(thk/2),boundary)
+    return MeshBody(copy(mesh),mesh0,velocity,srf_id,map,bbox,T(scale),T(thk/2),boundary)
 end
 Base.copy(a::GeometryBasics.Mesh) = GeometryBasics.Mesh(a.position,GeometryBasics.faces(a));
 Base.copy(b::MeshBody) = MeshBody(copy(b.mesh),copy(b.mesh0),copy(b.velocity),b.surf_id,b.map,
@@ -56,7 +57,7 @@ function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
     line = readline(fs)
     contains(line,"*heading") && (line = readline(fs))
     BlockType = contains(line,"*NODE") ? Val{:NodeBlock}() : Val{:DataBlock}()
-    
+
     # read the file
     while !eof(fs)
         line = readline(fs)
@@ -168,12 +169,26 @@ function WaterLily.measure(body::MeshBody,x::SVector{D},t;kwargs...) where D
     D==2 && (n=SVector{D}(n[1],n[2]); n=n/√sum(abs2,n))
     return (d,n,v)
 end
-function update!(body::MeshBody,t,dt=0;kwargs...)
+function update!(body::MeshBody{T},t::T,dt=0;kwargs...) where T
     # update mesh position, measure is done after
     points = Point3f[]
     for (i,pnt) in enumerate(body.mesh0.position)
         push!(points, Point3f(body.map(SA[pnt.data...]*body.scale,t)))
     end
+    # compute volecity and bounding box
+    _update!(body,points,dt)
+end
+function update!(body::MeshBody{T},points::AbstractArray{T},dt=0;kwargs...) where T
+    # update mesh position, measure is done after
+    points = Point3f[]
+    for (i,pnt) in enumerate(points)
+        push!(points, Point3f(SA[pnt.data...]*body.scale))
+    end
+    # compute volecity and bounding box
+    _update!(body,points,dt)
+end
+function update!(body::MeshBody{T},points::AbstractVector{Point{3,T}},dt=0) where T
+    # if nonzero time step, update the velocity field
     dt>0 && (body.velocity = GeometryBasics.Mesh((points-body.mesh.position)/dt,GeometryBasics.faces(body.mesh0)))
     body.mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(body.mesh0))
     # update bounding box
@@ -188,14 +203,14 @@ using LinearAlgebra: cross
 Return the normal vector to the triangle `tri`.
 """
 function normal(tri::GeometryBasics.Ngon{3}) #3.039 ns (0 allocations: 0 bytes)
-    n = cross(SVector(tri.points[2]-tri.points[1]),SVector(tri.points[3]-tri.points[1]))
-    n/(√sum(abs2,n)+eps(eltype(n))) # zero area triangles
+    hat(cross(SVector(tri.points[2]-tri.points[1]),SVector(tri.points[3]-tri.points[1])))
 end
+@inbounds @inline hat(v) = v/(√(v'*v)+eps(eltype(v)))
 @inbounds @inline d²_fast(tri::GeometryBasics.Ngon{3},x) = sum(abs2,x-center(tri)) #1.825 ns (0 allocations: 0 bytes)
 @inbounds @inline d²(tri::GeometryBasics.Ngon{3},x) = sum(abs2,x-locate(tri,x)) #4.425 ns (0 allocations: 0 bytes)
 @inbounds @inline center(tri::GeometryBasics.Ngon{3}) = SVector(sum(tri.points)/3.f0...) #1.696 ns (0 allocations: 0 bytes)
-@inbounds @inline area(tri::GeometryBasics.Ngon{3}) = 0.5*√sum(abs2,cross(SVector(tri.points[2]-tri.points[1]),SVector(tri.points[3]-tri.points[1]))) #1.784 ns (0 allocations: 0 bytes)
-@inbounds @inline dS(tri::GeometryBasics.Ngon{3}) = 0.5cross(SVector(tri.points[2]-tri.points[1]),SVector(tri.points[3]-tri.points[1]))
+@inbounds @inline area(tri::GeometryBasics.Ngon{3}) = 0.5f0*√sum(abs2,cross(SVector(tri.points[2]-tri.points[1]),SVector(tri.points[3]-tri.points[1]))) #1.784 ns (0 allocations: 0 bytes)
+@inbounds @inline dS(tri::GeometryBasics.Ngon{3}) = 0.5f0cross(SVector(tri.points[2]-tri.points[1]),SVector(tri.points[3]-tri.points[1]))
 """
     measure(mesh::GeometryBasics.Mesh,x,t;kwargs...)
 
@@ -210,18 +225,18 @@ function WaterLily.measure(mesh::M,velocity::M,x::SVector{T};kwargs...) where {M
     n,p = normal(mesh[u]),SVector(locate(mesh[u],x))
     s = x-p # signed Euclidian distance
     d = sign(sum(s.*n))*√sum(abs2,s)
-    # v = get_velocity(mesh[u],velocity[u],p)
+    v = get_velocity(mesh[u],velocity[u],p)
     return d,n,zero(x) #v
 end # 120.029 ns (0 allocations: 0 bytes)d # 4.266 μs (0 allocations: 0 bytes)
 
 # linear shape function interpolation of the nodal velocity values at point `p`
 function get_velocity(tri::Tr,vel::Tr,p::SVector{3,T}) where {Tr<:GeometryBasics.Ngon{3},T}
     dA = SVector{3,T}([sub_area(tri,p,Val{i}()) for i in 1:3])
-    return SVector(sum(tri.points.*dA)/sum(dA))
+    return SVector(sum(vel.points.*dA)/sum(dA))
 end
-@inline sub_area(t,p,::Val{1}) = area(GeometryBasics.Ngon(SA[Point(p),t[2],t[3]]))
-@inline sub_area(t,p,::Val{2}) = area(GeometryBasics.Ngon(SA[t[1],Point(p),t[3]]))
-@inline sub_area(t,p,::Val{3}) = area(GeometryBasics.Ngon(SA[t[1],t[2],Point(p)]))
+@inline sub_area(t,p,::Val{1}) = 0.5f0*√sum(abs2,cross(SVector(t[2]-p),SVector(t[3]-p)))
+@inline sub_area(t,p,::Val{2}) = 0.5f0*√sum(abs2,cross(SVector(p-t[1]),SVector(t[3]-t[1])))
+@inline sub_area(t,p,::Val{3}) = 0.5f0*√sum(abs2,cross(SVector(t[2]-t[1]),SVector(p-t[1])))
 
 # use divergence theorem to calculate volume of surface mesh
 # F⃗⋅k⃗ = -⨕pn⃗⋅k⃗ dS = ∮(C-ρgz)n⃗⋅k⃗ dS = ∫∇⋅(C-ρgzk⃗)dV = ρg∫∂/∂z(ρgzk⃗)dV = ρg∫dV = ρgV #
@@ -230,20 +245,46 @@ volume(body::MeshBody) = volume(body.mesh)
 
 import WaterLily: interp
 function get_p(tri::GeometryBasics.Ngon{3},p::AbstractArray{T,3},δ,::Val{true}) where T
-    c=center(tri);n=normal(tri);ar=area(tri);
-    ar.*n.*interp(c.+1.5 .+ δ.*n, p)
+    c=center(tri); ds=dS(tri); n=hat(ds)
+    ds.*interp(c + δ*n, p)
 end
 function get_p(tri::GeometryBasics.Ngon{3},p::AbstractArray{T,3},δ,::Val{false}) where T
-    c=center(tri);n=normal(tri);ar=area(tri);
-    ar.*n.*(interp(c.+1.5 .+ δ.*n, p) .- interp(c.+1.5 .- δ.*n, p))
+    c=center(tri); ds=dS(tri); n=hat(ds)
+    ds.*(interp(c + δ*n, p) - interp(c - δ*n, p))
+end
+
+function get_v(tri::Tr,vel::Tr,u::AbstractArray{T,4},δ,::Val{true})  where {Tr<:GeometryBasics.Ngon{3},T}
+    c=center(tri); ds=dS(tri); n=hat(ds)
+    u = get_velocity(tri,u,c)
+    v₁ = interp(c + δ*n, u)
+    v₂ = interp(c + 2δ*n, u)
+    return ds.*(u + v₂ - v₁)/2δ
+end
+function get_v(tri::Tr,vel::Tr,p::AbstractArray{T,4},δ,::Val{false})  where {Tr<:GeometryBasics.Ngon{3},T}
+    c=center(tri); ds=dS(tri); n=hat(ds)
+    u = get_velocity(tri,u,c)
+    for j in [-1,1]
+        v₁ = interp(c + j*δ*n, u)
+        v₂ = interp(c + 2j*δ*n, u)
+    end
+
+    τ = zeros(SVector{N-1,T})
+    vᵢ = vᵢ .- sum(vᵢ.*nᵢ)*nᵢ
+    for j ∈ [-1,1]
+        uᵢ = interp(xᵢ+j*δ*nᵢ,u)
+        uᵢ = uᵢ .- sum(uᵢ.*nᵢ)*nᵢ
+        τ = τ + (uᵢ.-vᵢ)./δ
+    end
+    return τ
+    ds.*(interp(c + δ*n, u) - interp(c - δ*n, u))
 end
 
 @inbounds @inline normal2D(tri::GeometryBasics.Ngon{3})=  SVector{2}(normal(tri)[1:2])
 @inbounds @inline center2D(tri::GeometryBasics.Ngon{3}) = SVector{2}(center(tri)[1:2])
 
 function get_p(tri::GeometryBasics.Ngon{3},p::AbstractArray{T,2},δ,::Val{true}) where T
-    c=center2D(tri);n=normal2D(tri);ar=area(tri);
-    p = ar.*n.*interp(c.+1.5 .+ δ.*n, p)
+    c=center2D(tri); n=normal2D(tri); ar=area(tri);
+    p = ar.*n*interp(c + δ*n, p)
     return SA[p[1],p[2],zero(T)]
 end
 forces(a::GeometryBasics.Mesh, flow::Flow, δ=2, boundary=Val{true}()) = map(T->get_p(T, flow.p, δ, boundary), a)

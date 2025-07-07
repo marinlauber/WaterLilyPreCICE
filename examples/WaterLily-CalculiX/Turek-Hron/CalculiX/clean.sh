@@ -3,6 +3,7 @@
 
 rm -rf ../precice-run/
 rm -rf precice-profiling
+rm -rf datp
 rm -f *.12d\
       *.cvg\
       *.frd\
@@ -10,4 +11,5 @@ rm -f *.12d\
       *.dat\
       spooles.out\
       *.log\
+      *.pvd\
       WarnNodeMissMultiStage.nam

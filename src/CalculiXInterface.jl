@@ -38,7 +38,9 @@ function CalculiXInterface(T=Float64; surface_mesh="geom.inp", center=0, scale=1
     dt = PreCICE.getMaxTimeStepSize()
 
     # add some passive_bodies if we need
-    body = add_bodies(body, passive_bodies)
+    for b in passive_bodies
+        body += b #use Setbody
+    end
     
     # return coupling interface
     interface = Interface(ControlPointsID, forces, deformation, map_id, [dt], rw_mesh, read_data, write_data)

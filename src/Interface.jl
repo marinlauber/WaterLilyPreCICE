@@ -12,12 +12,12 @@ struct Interface <: AbstractInterface
 end
 
 function Interface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, boundary=true, thk=0, passive_bodies=nothing,
-                    rw_mesh="Fluid-Mesh", read_data="Displacements", write_data="Forces", kwargs...)  
-    
+                    rw_mesh="Fluid-Mesh", read_data="Displacements", write_data="Forces", kwargs...)
+
     # load the file
     mesh, srf_id = load_inp(surface_mesh) # can we get rid of this?
-    
-    # pass nodes and elements IDS to preCICE, here we use the unscaled and un-maped mesh
+
+    # pass nodes and elements IDs to preCICE, here we use the unscaled and un-mapped mesh
     numberOfVertices, dimensions = length(mesh.position), 3
     vertices = Array{Float64,2}(undef, dimensions, numberOfVertices)
     for i in 1:numberOfVertices
@@ -25,7 +25,7 @@ function Interface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, bou
     end
     ControlPointsID = PreCICE.setMeshVertices(rw_mesh, reshape(vertices, (:,3)))
 
-    # construct the actual mesh now that the mapping has been compuated
+    # construct the actual mesh now that the mapping has been computed
     verts = GeometryBasics.Point3f[]
     for i in 1:numberOfVertices
         # prepare the mesh, here we move it to the center of the domain
@@ -43,14 +43,16 @@ function Interface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, bou
 
     # mapping from center to nodes, needed for the forces
     map_id = Base.map(((i,F),)->vcat(Base.to_index.(F).data...),enumerate(faces(body.mesh)))
-    
+
     # initilise PreCICE
     PreCICE.initialize()
     dt = PreCICE.getMaxTimeStepSize()
 
     # add some passive_bodies if we need
-    body = add_bodies(body, passive_bodies)
-    
+    for b in passive_bodies
+        body += b #use Setbody
+    end
+
     # return coupling interface
     interface = Interface(ControlPointsID, forces, deformation, map_id, [dt], rw_mesh, read_data, write_data)
     return interface, body
@@ -58,28 +60,31 @@ end
 
 function readData!(interface::S) where S<:Interface
     # Read control point displacements
-    interface.deformation .= PreCICE.readData(interface.rw_mesh, interface.read_data, 
+    interface.deformation .= PreCICE.readData(interface.rw_mesh, interface.read_data,
                                               interface.ControlPointsID, interface.dt[end])
 end
 
 function update!(interface::S, sim::CoupledSimulation; kwargs...) where S<:Interface
     # update mesh position, measure is done elsewhere
     points = Point3f[]
-    for (i,pnt) in enumerate(sim.body.mesh0.position) # initial mesh is in the ref config.
-        push!(points, Point3f(SA[pnt.data...] .+ sim.body.scale.*interface.deformation[i,:]))
+    #TODO can we check that the mesh body is always at body.a
+    mesh_body = sim.body.a
+    for (i,pnt) in enumerate(mesh_body.mesh0.position) # initial mesh is in the ref config.
+        push!(points, Point3f(SA[pnt.data...] .+ mesh_body.scale.*interface.deformation[i,:]))
     end
     # update
-    set!(sim.body, GeometryBasics.Mesh(points,GeometryBasics.faces(sim.body.mesh)))
+    set!(mesh_body, GeometryBasics.Mesh(points,GeometryBasics.faces(mesh_body.mesh)))
     bbox = Rect(points)
-    set!(sim.body, Rect(bbox.origin.-max(4,2sim.body.half_thk),bbox.widths.+max(8,4sim.body.half_thk)))
+    set!(mesh_body, Rect(bbox.origin.-max(4,2mesh_body.half_thk),bbox.widths.+max(8,4mesh_body.half_thk)))
 end
-set!(a::CombinedBodies, b) = set!(a.bodies[1], b)
+# set!(a::SetBody, b) = set!(a.bodies[1], b)
 set!(a::MeshBody, b::Mesh) = a.mesh = b
 set!(a::MeshBody, b::Rect) = a.bbox = b
 
 import WaterLily: interp
-get_forces!(interface::S, flow::Flow, body::CombinedBodies; δ=1.f0, kwargs...) where S<:Interface = 
-            get_forces!(interface, flow, body.bodies[1]; δ, kwargs...)
+# get_forces!(interface::S, flow::Flow, body::CombinedBodies; δ=1.f0, kwargs...) where S<:Interface =
+            # get_forces!(interface, flow, body.bodies[1]; δ, kwargs...)
+get_forces!(interface::S, flow::Flow, body::WaterLily.SetBody; δ=1.f0, kwargs...) where S<:Interface = get_forces!(interface, flow, body.a; δ, kwargs...)
 function get_forces!(interface::S, flow::Flow, body::MeshBody; δ=1.f0, kwargs...) where S<:Interface
     t = sum(@views(interface.dt[1:end])) # the time
     interface.forces .= 0 # reset the forces

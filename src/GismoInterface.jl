@@ -43,28 +43,26 @@ function GismoInterface(T=Float64; dir=nothing, passive_bodies=nothing, center=0
     dt = PreCICE.getMaxTimeStepSize()
     
     # construct the interface curves
-    bodies = AbstractBody[]; ops = Function[]
+    body = NoBody() # empty first body
     for (i,(cps,knot)) in enumerate(zip(ControlPoints,knots))
         direction[i] != 1 && (cps = reverse(cps;dims=2))
         cps = SMatrix{2,size(cps,2)}(cps)
         knot = SVector{length(knot)}(knot)
         weights = SA[ones(size(cps,2))...]
-        push!(bodies,DynamicNurbsBody(NurbsCurve(cps.+center, knot, weights)))
-        push!(ops, ∩) # always interset with the next curve
+        body += DynamicNurbsBody(NurbsCurve(cps.+center, knot, weights))
     end
 
-    # return coupling interface
+    # coupling interface
     interface = GismoInterface(ControlPointsID, ControlPoints, quadPointID, quadPoint, forces,
                                   deformation, knots, [dt], direction, length(bodies), center)
     
     # add some passive_bodies if we want
-    !isnothing(passive_bodies) && for crv in passive_bodies
-        push!(bodies,crv); push!(ops, ∪) # always union with the next curve
-        println("Adding a curve to the stack...")
+    for b in passive_bodies
+       body += b
     end
 
     # return the interface and the body
-    return interface, CombinedBodies(bodies, ops)
+    return interface, body
 end
 
 function readData!(interface::GismoInterface)
@@ -98,11 +96,11 @@ Compute the interface forces at the quadrature points `quadPoints` for each body
 """
 Index(Qs,i) = sum(length.(Qs[1:i-1]))+1:sum(length.(Qs[1:i]))
 using ParametricBodies: _pforce, _vforce
-function get_forces!(interface::GismoInterface, flow::Flow{T}, body::CombinedBodies, kwargs...) where T
-    for (i,b) in enumerate(body.bodies[1:length(interface.quadPoint)]) # only select the active curves
-        I = Index(interface.quadPoint,i)
-        fi = reduce(hcat,[-1.0*_pforce(b.curve,flow.p,s,zero(T),Val{false}()) for s ∈ interface.quadPoint[i]])
-        interface.dir[i] != 1 && (fi = reverse(fi;dims=2))
-        interface.forces[:,I] .= fi
-    end
+function get_forces!(interface::GismoInterface, flow::Flow{T}, body, kwargs...) where T
+    # for (i,b) in enumerate(body.bodies[1:length(interface.quadPoint)]) # only select the active curves
+    #     I = Index(interface.quadPoint,i)
+    #     fi = reduce(hcat,[-1.0*_pforce(b.curve,flow.p,s,zero(T),Val{false}()) for s ∈ interface.quadPoint[i]])
+    #     interface.dir[i] != 1 && (fi = reverse(fi;dims=2))
+    #     interface.forces[:,I] .= fi
+    # end
 end

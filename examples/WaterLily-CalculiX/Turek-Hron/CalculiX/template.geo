@@ -1,9 +1,9 @@
 SetFactory("OpenCASCADE");
-Circle(1) = {0, 0, 0, 0.5, 0, 2*Pi};
-Point(2) = {0.4, 0.1, 0.0, 1.0};
-Point(3) = {0.4, -0.1, 0.0, 1.0};
-Point(4) = {3.6, -0.1, 0.0, 1.0};
-Point(5) = {3.6, 0.1, 0.0, 1.0};
+Circle(1) = {0, 0, -0.05, 0.5, 0, 2*Pi};
+Point(2) = {0.4, 0.1, -0.05, 1.0};
+Point(3) = {0.4, -0.1, -0.05, 1.0};
+Point(4) = {3.6, -0.1, -0.05, 1.0};
+Point(5) = {3.6, 0.1, -0.05, 1.0};
 Line(2) = {2, 5};
 Line(3) = {5, 4};
 Line(4) = {4, 3};
@@ -15,7 +15,7 @@ Curve Loop(3) = {1};
 Plane Surface(2) = {3};
 BooleanUnion{ Surface{2}; Delete; }{ Surface{1}; Delete; }
 Extrude {0, 0, 0.1} {
-    Surface{2}; 
+    Surface{2};
 }
 // Physical Surface(15) = {4, 3, 5, 6};
 Transfinite Curve {5, 11} = 32 Using Progression 1;

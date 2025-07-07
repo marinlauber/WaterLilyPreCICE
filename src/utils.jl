@@ -4,13 +4,13 @@ mutable struct Store
     pˢ:: AbstractArray
     b :: AbstractBody
     function Store(sim::Simulation)
-        new(copy(sim.flow.u),copy(sim.flow.p),copy(sim.body))
+        new(copy(sim.flow.u),copy(sim.flow.p),deepcopy(sim.body))
     end
 end
-Base.copy(::WaterLily.NoBody) = WaterLily.NoBody()
+# Base.copy(::WaterLily.NoBody) = WaterLily.NoBody()
 function store!(s::Store,sim::Simulation)
     s.uˢ .= sim.flow.u; s.pˢ .= sim.flow.p
-    s.b = copy(sim.body)
+    s.b = deepcopy(sim.body)
 end
 function revert!(s::Store,sim::Simulation)
     sim.flow.u .= s.uˢ; sim.flow.p .= s.pˢ; pop!(sim.flow.Δt)

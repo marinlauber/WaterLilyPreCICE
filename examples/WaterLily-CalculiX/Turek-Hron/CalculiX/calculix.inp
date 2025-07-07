@@ -9,21 +9,21 @@
 ** units are in [m, kg, s], so Pre = kg/(m*S^2) = 1 N/m^2 [Pa]
 *MATERIAL,NAME=RUBBER
 *ELASTIC
- 1.0e4, 0.33
+ 1.4e4, 0.4
 *DENSITY
- 10.0
+ 12.8
 *DAMPING, ALPHA=0.00, BETA=0.00
 
 *SOLID SECTION, MATERIAL=RUBBER, ELSET=FLAP
 
 *STEP,NLGEOM,INC=1000000
 *DYNAMIC,ALPHA=-0.3
- 0.05, 10.0, 0.05,0.1
+ 0.05, 1000.0, 0.05,0.1
 
 ** forces are in N = kg*m/s^2
 *CLOAD
  Ninterface, 1, 0.0
- Ninterface, 2, 0.01
+ Ninterface, 2, 0.0
  Ninterface, 3, 0.0
 
 *NODE FILE,FREQUENCY=5

@@ -20,10 +20,6 @@ include("MeshBodies.jl")
 export MeshBody
 @reexport using GeometryBasics
 
-# multiple bodies
-include("Bodies.jl")
-export CombinedBodies,add_bodies
-
 # include the KDTree
 include("KDTree.jl")
 export KDTree,Bbox
@@ -51,14 +47,14 @@ Constructor for a WaterLily.Simulation that uses PreCICE for coupling with Calcu
     - `surface_mesh`  : Path to the surface mesh file (not used for :GismoInterface).
     - `scale`         : Scaling factor for the mesh (not used for :GismoInterface).
     - `boundary`      : Is the mesh provided the boundary of the solid (default is true)
-    - `thickness`     : Thickness of the solid (default is 0, boundary must be set 
+    - `thickness`     : Thickness of the solid (default is 0, boundary must be set
                         to false for this to take effects)
     - `center`        : Center of the solid (default is 0, can be used instead of `map(x,t)`
                         to move the structure in the domain)
     - `curve_dir`     : Direction of the curve for the Gismo interface (default is nothing)
     - `passive_bodies`: Passive bodies to add to the interface, they are immersed,
                         but no FSI occurs for those
-    - `func`          : Function to apply to the interface, default is no function 
+    - `func`          : Function to apply to the interface, default is no function
                         (only used for :LumpedInterface)
     - `prob`          : Problem to solve, default is nothing (only used for :LumpedInterface)
 """
@@ -76,8 +72,8 @@ function CoupledSimulation(args...; T=Float64, mem=Array, interface=:Interface, 
     if interface==:GismoInterface
         @assert length(args[1])==2 "3D simulations are not support for Gismo coupling"
     elseif interface in [:Interface,:CalculiXInterface]
-        length(args[1])==2 && @warn("\nThe Interface/CalculiXInterface assumes that 2D simulation happen in the x-y plane and that\n"*
-                                    "the z coordinate is zero. If this is not the case, the interface will not work as expected.")
+        length(args[1])==2 && @warn("\nThe Interface/CalculiXInterface assumes that 2D simulation happen in the x-y plane and that the z coordinate\n"*
+                                    "of the structural mesh is zero. If this is not the case, the interface will not work as expected.")
     end
 
      # keyword aguments might be specified
@@ -99,7 +95,7 @@ function CoupledSimulation(args...; T=Float64, mem=Array, interface=:Interface, 
 
     # storage for iteration
     store =  Store(sim)
-    
+
     # return coupled sim
     CoupledSimulation(sim, int, store)
 end
@@ -152,7 +148,7 @@ function writeData!(interface::AbstractInterface,sim::Simulation,store::Store)
 
     # do the coupling @TODO this return zeros, so don;t replace the last dt
     PreCICE.advance(interface.dt[end])
-    
+
     # read checkpoint if required or move on
     if PreCICE.requiresReadingCheckpoint()
         revert!(store,sim)
