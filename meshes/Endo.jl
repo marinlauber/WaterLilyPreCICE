@@ -54,7 +54,7 @@ mesh_wr = vtkWriter("endo_mesh", attrib=Dict("velocity"=>mesh_velocity))
 # flow writer
 vtk_velocity(a::AbstractSimulation) = a.flow.u |> Array;
 vtk_pressure(a::AbstractSimulation) = a.flow.p |> Array;
-vtk_vbody(a::AbstractSimulation) = a.flow.p |> Array;
+vtk_vbody(a::AbstractSimulation) = a.flow.V |> Array;
 vtk_body(a::AbstractSimulation) = (measure_sdf!(a.flow.σ, a.body, sim_time(a)); a.flow.σ |> Array);
 new_attrib = Dict("Velocity"=>vtk_velocity, "Pressure"=>vtk_pressure, "dist"=>vtk_body, "Vbody"=>vtk_vbody)
 wr = vtkWriter("endo_flow"; attrib=new_attrib)
@@ -64,6 +64,7 @@ for reference in motion
     push!(sim.flow.Δt,sim.L)
     points = [Point3f(pnt) for pnt in eachcol(reference)]
     WaterLilyPreCICE.update!(body,points,1)
+    measure!(sim) # update velocity
     save!(mesh_wr,body,sim_time(sim)); save!(wr,sim)
 end
 close(mesh_wr); close(wr)

@@ -226,7 +226,7 @@ function WaterLily.measure(mesh::M,velocity::M,x::SVector{T};kwargs...) where {M
     s = x-p # signed Euclidian distance
     d = sign(sum(s.*n))*√sum(abs2,s)
     v = get_velocity(mesh[u],velocity[u],p)
-    return d,n,zero(x) #v
+    return d,n,v
 end # 120.029 ns (0 allocations: 0 bytes)d # 4.266 μs (0 allocations: 0 bytes)
 
 # linear shape function interpolation of the nodal velocity values at point `p`
