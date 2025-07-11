@@ -21,7 +21,8 @@ end
 # make a sim
 sim = CoupledSimulation((6L,L), uBC, R; U, ν=U*R/Re, exitBC=true,
                          surface_mesh=joinpath(@__DIR__,"../CalculiX/surface.inp"),
-                         passive_bodies=[AutoBody((x,t)->L/2-abs(x[2]-L/2.f0)-1.5f0)], # wall at ±L/2
+                         passive_bodies=[AutoBody((x,t)->L÷2 - abs(x[2]-L÷2) - 1.5f0),
+                                         AutoBody((x,t)->√sum(abs2,x.-0.2f0L/0.41f0)-0.05f0L/0.41f0)], # wall at ±L/2 and cylinder
                          scale=R,center=SA[0.2L/0.41,0.2L/0.41,0])
 
 # make the paraview writer
@@ -46,7 +47,7 @@ while PreCICE.isCouplingOngoing()
     # if we have converged, save if required
     if PreCICE.isTimeWindowComplete()
         # save the data 4 times per convective time
-        # length(sim.flow.Δt)%1==0 && 
+        # length(sim.flow.Δt)%1==0 &&
         save!(wr, sim)
     end
 end
