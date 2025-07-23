@@ -29,7 +29,7 @@ MeshBody(mesh::M;map=(x,t)->x,scale=1.0,thk=0f0,boundary=true,T=Float32) where M
 function MeshBody(mesh0::M,srf_id,map,scale,thk,boundary,T) where M<:GeometryBasics.Mesh
     points = Point3f[] # scale and map the points to the corrcet location
     for (i,pnt) in enumerate(mesh0.position)
-        push!(points, Point3f(map(SA[pnt.data...]*scale,0)))
+        push!(points, Point3f(map(SA{T}[pnt.data...]*T(scale),zero(T))))
     end
     mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(mesh0))
     velocity = GeometryBasics.Mesh(zero(points),GeometryBasics.faces(mesh0))

@@ -1,11 +1,15 @@
 using WaterLilyPreCICE,StaticArrays,WriteVTK
+using Plots
+
+# cell centered velocity magnitude
+mag(I,u) = √sum(ntuple(i->0.25*(u[I,i]+u[I+δ(i,I),i])^2,length(I)))
 
 function make_sim(;L=128,Re=1e3,U=1,T=Float32)
     # move the geometry to the center of the domain
-    map(x,t) = x .+ SA{T}[0.2L/0.41,0.2L/0.41,0]
+    map(x,t) = x .+ SA{T}[0.25L/0.41,0.2L/0.41,0]
 
     # make the body from the stl mesh and the sdf wall
-    flap = MeshBody(joinpath(@__DIR__,"../CalculiX/surface.inp");map,scale=0.1f0L/0.41f0)
+    flap = MeshBody(joinpath(@__DIR__,"../CalculiX/surface.inp");map,scale=1.f0)
     wall = AutoBody((x,t)->L÷2 - abs(x[2]-L÷2) - 1.5f0)
     cylinder = AutoBody((x,t)->√sum(abs2,x.-0.2f0L/0.41f0)-0.05f0L/0.41f0)
     TurekHron = cylinder + flap + wall
@@ -33,15 +37,20 @@ custom_attrib = Dict("u"=>vtk_velocity, "p"=>vtk_pressure, "d"=>vtk_body, "v"=>v
 # make the sim
 sim = make_sim(L=128)
 # make the paraview writer
-wr = vtkWriter("Turek-Hron";attrib=custom_attrib)
+# wr = vtkWriter("Turek-Hron";attrib=custom_attrib)
+R = inside(sim.flow.p)
 # duration and write steps
-duration,step = 10,0.1
+duration,step = 3,0.1
 # run the sim
-@time for tᵢ in range(0,duration;step)
+@time @gif for tᵢ in range(0,duration;step)
     # update until time tᵢ in the background
     sim_step!(sim,tᵢ;remeasure=true)
-    save!(wr,sim)
+    # save!(wr,sim)
+    @inside sim.flow.σ[I] = mag(I,sim.flow.u)
+    @inside sim.flow.σ[I] = ifelse(abs(sim.flow.σ[I])<0.001,NaN,sim.flow.σ[I])
+    flood(sim.flow.σ[R],clims=(0,2), axis=([], false),
+          cfill=:jet,legend=false,border=:none,size=(6*sim.L,sim.L))
     # print time step
     println("tU/L=",round(tᵢ,digits=4),", Δt=",round(sim.flow.Δt[end],digits=3))
 end
-close(wr)
+# close(wr)

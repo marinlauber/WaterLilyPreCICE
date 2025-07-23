@@ -13,6 +13,4 @@ Extrude {0, 0, NX/160.0} {
     Surface{1};
 }
 // Physical Surface(14) = {5, 2, 4, 3};
-Transfinite Curve {8, 2, 4, 12} = 48 Using Progression 1;
-Transfinite Curve {6, 11, 7, 9} = 4 Using Progression 1;
-// Transfinite Curve {13, 5, 10, 3} = NX/10 Using Progression 1;
+Transfinite Surface {1, 2, 3, 4, 5, 6};

@@ -23,11 +23,14 @@ sim = CoupledSimulation((6L,L), uBC, R; U, ν=U*R/Re, exitBC=true,
                          surface_mesh=joinpath(@__DIR__,"../CalculiX/surface.inp"),
                          passive_bodies=[AutoBody((x,t)->L÷2 - abs(x[2]-L÷2) - 1.5f0),
                                          AutoBody((x,t)->√sum(abs2,x.-0.2f0L/0.41f0)-0.05f0L/0.41f0)], # wall at ±L/2 and cylinder
-                         scale=R,center=SA[0.2L/0.41,0.2L/0.41,0])
+                         scale=1.0,center=SA[0.25L/0.41,0.2L/0.41,0],T=Float32)
 
 # make the paraview writer
 wr = vtkWriter("Turek-Hron";attrib=custom_attrib)
 save!(wr, sim)
+
+# ramp for the impulse
+@inline C(t) = (tanh(4t-4)+tanh(4))/(1+tanh(4))
 
 # integrate in time
 while PreCICE.isCouplingOngoing()
@@ -36,10 +39,10 @@ while PreCICE.isCouplingOngoing()
     readData!(sim)
 
     # update the this participant and scale forces
-    sim_step!(sim); sim.int.forces .*= sim.U^2/2sim.L
+    sim_step!(sim); #sim.int.forces .*= sim.U^2/2sim.L
     sim.int.forces[:,3] .= 0.0 # zero-spanwise forces
-    # println(sum(sim.int.forces,dims=1)./size(sim.int.forces,1)) # print the average force
-    sim.int.forces[:,2] .= min((1-cos(2π*sim_time(sim)/2))/2,1)*sim.U^2/2sim.L*sin(2π*sim_time(sim)) # add a small perturbation in the y-direction
+    # sim_time(sim)<1 && sim.int.forces[:,2] .= C(sim_time(sim))*sim.U^2/2sim.L*sin(2π*sim_time(sim)) # add a small perturbation in the y-direction
+    println(sum(sim.int.forces,dims=1)./size(sim.int.forces,1)) # print the average force
 
     # write data to the other participant
     writeData!(sim)
@@ -47,8 +50,7 @@ while PreCICE.isCouplingOngoing()
     # if we have converged, save if required
     if PreCICE.isTimeWindowComplete()
         # save the data 4 times per convective time
-        # length(sim.flow.Δt)%1==0 &&
-        save!(wr, sim)
+        length(sim.flow.Δt)%10==0 && save!(wr, sim)
     end
 end
 close(wr)

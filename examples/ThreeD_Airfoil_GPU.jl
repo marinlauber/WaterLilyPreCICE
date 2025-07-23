@@ -78,7 +78,7 @@ forces = []
 @time for tᵢ in range(t₀,t₀+duration;step)
     # update until time tᵢ in the background
     sim_step!(sim,tᵢ;remeasure=false)
-    write!(wr, sim); write!(wr_mesh, body, sim_time(sim))
+    save!(wr, sim); save!(wr_mesh, body, sim_time(sim))
     # print time step
     println("tU/L=",round(tᵢ,digits=4),", Δt=",round(sim.flow.Δt[end],digits=3))
 end

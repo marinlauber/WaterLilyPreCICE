@@ -90,7 +90,7 @@ open("geom.inp", "w") do f
         occursin("**", line) && break
         line_split = split(replace(line, "," => " "))
         data = to_float(line_split[2:end])
-        scaled_coords = [scale, scale, zscale] .* data
+        scaled_coords = data #[scale, scale, zscale] .* data
         scaled_line = line_split[1] * join([", " * string(round(d,digits=6)) for d in scaled_coords])
         print(f, scaled_line * "\n")
     end

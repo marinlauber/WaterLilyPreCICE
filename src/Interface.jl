@@ -64,29 +64,29 @@ function readData!(interface::S) where S<:Interface
                                               interface.ControlPointsID, interface.dt[end])
 end
 
-function update!(interface::S, sim::CoupledSimulation; kwargs...) where S<:Interface
+update!(interface::S, sim::CoupledSimulation; kwargs...) where S<:Interface = update!(interface, sim.body; kwargs...)
+function update!(::Interface, ::AbstractBody; kwargs...) end # do nothing for other bodies
+function update!(interface::S, body::MeshBody; kwargs...) where S<:Interface
     # update mesh position, measure is done elsewhere
     points = Point3f[]
-    #TODO can we check that the mesh body is always at body.a
-    mesh_body = sim.body.a
-    for (i,pnt) in enumerate(mesh_body.mesh0.position) # initial mesh is in the ref config.
-        push!(points, Point3f(SA[pnt.data...] .+ mesh_body.scale.*interface.deformation[i,:]))
+    for (i,pnt) in enumerate(body.mesh0.position) # initial mesh is in the ref config.
+        push!(points, Point3f(SA[pnt.data...] .+ body.scale.*interface.deformation[i,:]))
     end
     # update
-    set!(mesh_body, GeometryBasics.Mesh(points,GeometryBasics.faces(mesh_body.mesh)))
+    set!(body, GeometryBasics.Mesh(points,GeometryBasics.faces(body.mesh)))
     bbox = Rect(points)
-    set!(mesh_body, Rect(bbox.origin.-max(4,2mesh_body.half_thk),bbox.widths.+max(8,4mesh_body.half_thk)))
+    set!(body, Rect(bbox.origin.-max(4,2body.half_thk),bbox.widths.+max(8,4body.half_thk)))
 end
 # set!(a::SetBody, b) = set!(a.bodies[1], b)
 set!(a::MeshBody, b::Mesh) = a.mesh = b
 set!(a::MeshBody, b::Rect) = a.bbox = b
 
-import WaterLily: interp
-# get_forces!(interface::S, flow::Flow, body::CombinedBodies; δ=1.f0, kwargs...) where S<:Interface =
-            # get_forces!(interface, flow, body.bodies[1]; δ, kwargs...)
-get_forces!(interface::S, flow::Flow, body::WaterLily.SetBody; δ=1.f0, kwargs...) where S<:Interface = get_forces!(interface, flow, body.a; δ, kwargs...)
+function get_forces!(interface::S, flow::Flow, body::WaterLily.SetBody; δ=1.f0, kwargs...) where S<:Interface
+    get_forces!(interface, flow, body.a; δ, kwargs...)
+    get_forces!(interface, flow, body.b; δ, kwargs...)
+end
+function get_forces!(::Interface, ::Flow, ::AbstractBody; kwargs...) end # skip if not a MeshBody
 function get_forces!(interface::S, flow::Flow, body::MeshBody; δ=1.f0, kwargs...) where S<:Interface
-    t = sum(@views(interface.dt[1:end])) # the time
     interface.forces .= 0 # reset the forces
     # compute nodal forces
     for id in 1:length(body.mesh)

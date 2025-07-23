@@ -51,7 +51,7 @@
 
   <coupling-scheme:parallel-implicit>
     <participants first="WaterLily" second="Calculix"/>
-    <max-time value="50.0" />
+    <max-time value="10.0" />
     <time-window-size value="0.005"/>
     <exchange data="Displacements" mesh="Solid-Mesh" from="Calculix" to="WaterLily"/>
     <exchange data="Forces" mesh="Solid-Mesh" from="WaterLily" to="Calculix"/>
