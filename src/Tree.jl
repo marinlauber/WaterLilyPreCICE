@@ -9,10 +9,11 @@ BoundingBox(lo::NTuple{3,T}, up::NTuple{3,T}) where T = BoundingBox{T}(SVector{3
 
 function BoundingBox(mesh_part::AbstractMesh,exp::Real,T::DataType)
     rec=Rect{3,T}(mesh_part.position) #0
-    bbox=boxtobox(rec) #0
+    bbox=BoundingBox(rec) #0
     box0=expand_box(bbox,exp)
     return box0
 end
+BoundingBox(box::HyperRectangle{3,T}) where T = BoundingBox{T}(box.origin,box.origin.+box.widths)
 
 struct TreeInfo
     lvl::Int
@@ -21,7 +22,7 @@ struct TreeInfo
     n_meshelements::Int
 end
 
-struct BVH_simple{T}
+struct BoundedVolumeHierarchy{T}
     mesh::AbstractMesh
     nodes::Vector{BoundingBox{T}}
     leaves::Vector{BoundingBox{T}}
@@ -30,7 +31,7 @@ struct BVH_simple{T}
     info:: TreeInfo
 end
 
-function Base.show(io::IO, bvh::BVH_simple{T}) where T
+function Base.show(io::IO, bvh::BoundedVolumeHierarchy{T}) where T
     println(io, "BVH ")
     println(io, " ├─ type used:  $T")
     println(io, " ├─ levels:     $(bvh.info.lvl)")
@@ -40,28 +41,36 @@ function Base.show(io::IO, bvh::BVH_simple{T}) where T
 end
 
 
-function BVH_simple( file ::String, lvl ::Int ; overlap::Int =1, box0_exp::Int=2,T::DataType = Float64)
-    mesh = load(file)
-    return BVH_simple(mesh, lvl; overlap=overlap, box0_exp=box0_exp, T=T)
+function BoundedVolumeHierarchy(fname::String, lvl::Int; overlap::Int=1, box0_exp::Int=2,T::DataType=Float32, mem=Array)
+    mesh = load(fname)
+    return BoundedVolumeHierarchy(mesh,lvl, overlap=overlap, box0_exp=box0_exp,T=T, mem=mem)
 end
-function BVH_simple( mesh::AbstractMesh, lvl ::Int ; overlap::Int =1, box0_exp::Int=2,T::DataType = Float64)
 
-    box0=BoundingBox(mesh,box0_exp,T)
-    SubD=make_boxes_old(box0,lvl)
+function BoundedVolumeHierarchy(mesh::AbstractMesh, lvl::Int; overlap::Int=1, box0_exp::Int=4, T::DataType=Float32, mem=Array)
 
-    SubD=[expand_box(leaf,overlap) for leaf in SubD]
-    entries=[split_mesh(box,mesh) for box in SubD]
+    box0 = BoundingBox(mesh, box0_exp, T)
+    SubD = make_boxes_old(box0, lvl) |> mem
+    positions= mesh.position |> mem
 
-    leaves=[BoundingBox(mesh_part,1,T) for mesh_part in entries];
-    nodes=construct_nodes(leaves,lvl)
+    @loop SubD[I] = expand_box(SubD[I], overlap) over I ∈ CartesianIndices(SubD)
+
+    # Now using mem for arrays
+    entries = Vector{AbstractMesh}(undef, length(SubD))      # split mesh parts
+    leaves  = mem{BoundingBox{T}}(undef, length(SubD))       # bounding boxes
+
+    @loop entries[I] = split_mesh(SubD[I], mesh) over I ∈ CartesianIndices(SubD)
+    @loop leaves[I]   = BoundingBox(entries[I], 2, T) over I ∈ CartesianIndices(SubD)
+
+    nodes = construct_nodes(leaves, lvl)  # make sure this is GPU-safe too
     info = TreeInfo(
-         lvl,
+        lvl,
         length(nodes),
         length(leaves),
         length(mesh.faces)
         )
 
-    return BVH_simple{T}(mesh,nodes, leaves,vcat(nodes,leaves), entries,info)
+    # Use vcat from GPU-compatible libraries (e.g. CUDA.jl has CUDA.vcat) if needed
+    return BoundedVolumeHierarchy{T}(mesh, nodes, leaves, vcat(nodes, leaves), entries, info)
 end
 
 function construct_nodes(leaves::Vector{BoundingBox{T}}, lvl::Int) where T
@@ -111,11 +120,6 @@ end
 
 function inbox(x::AbstractVector{T}, box::BoundingBox{U}) where {T,U}
     all((box.lo .<= x) .& (x .<= box.up)) || all((box.up .<= x) .& (x .<= box.lo))
-end
-
-function boxtobox(box::HyperRectangle{3,T}) where T
-    # 0 allocations
-   BoundingBox{T}(box.origin,box.origin .+box.widths)
 end
 
 
@@ -180,21 +184,14 @@ function make_boxes(lvl::Int, box_array::Vector{BoundingBox{T}}) where{T}
 end
 
 function split_mesh(box::BoundingBox{T}, mesh::AbstractMesh) where T
-    #6 allocations
     faces = GeometryBasics.faces(mesh)
-    # positions=copy(mesh.position)
-    # norms=copy(mesh.normal)
     max=length(mesh.faces)
     mask=fill(NaN32,length(mesh.position))
-    # points = SVector{3,T}.(mesh.position)
     count=0
-    # mesh = GeometryBasics.Mesh(SVector{3,T}.(mesh.position), GeometryBasics.faces(mesh))
     coll = Vector{eltype(faces)}(undef,max)
-
-    #@TODO not fully correct yet use found faces to mask points
     @inbounds for face in faces
         for i in Tuple(face)
-            v = mesh.position[i]  # Now an SVector{3,T}
+            v = mesh.position[i] 
             inside = all(box.lo .<= v .<= box.up)
 
             if inside
@@ -205,10 +202,8 @@ function split_mesh(box::BoundingBox{T}, mesh::AbstractMesh) where T
             end
         end
     end
-
-    new_mesh=GeometryBasics.Mesh(mesh.position.*mask,coll[1:count],normal=mesh.normal.*mask)
-
+    # new_mesh=GeometryBasics.Mesh(mesh.position.*mask,coll[1:count],normal=mesh.normal.*mask)
+    new_mesh=GeometryBasics.Mesh(mesh.position.*mask,coll[1:count])
     return new_mesh
 end
-
 
