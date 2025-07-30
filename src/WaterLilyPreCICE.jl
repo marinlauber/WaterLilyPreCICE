@@ -21,8 +21,8 @@ export MeshBody
 @reexport using GeometryBasics
 
 # include the KDTree
-include("KDTree.jl")
-export KDTree,Bbox
+include("Tree.jl")
+export BVH_simple,BoundingBox
 
 # structure for coupled simulation
 mutable struct CoupledSimulation <: AbstractSimulation
