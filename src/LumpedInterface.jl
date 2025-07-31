@@ -66,7 +66,7 @@ function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)
     forces = zeros(T, size(ControlPoints))
     vertices .= 0 # reset since tey become the displacements
     map_id = map(((i,F),)->vcat(Base.to_index.(F).data...),enumerate(faces(mesh)))
-    
+
     # time step
     dt_precice = PreCICE.getMaxTimeStepSize()
 
@@ -146,7 +146,7 @@ end
 
 Get the flow rate for the 0D model, either using a 1st or 2nd order scheme.
 """
-function get_Q(a::LumpedInterface) 
+function get_Q(a::LumpedInterface)
     N = length(a.V)
     # dVdt|₀ = 0.0
     N==1 && return 0.0
@@ -179,10 +179,10 @@ Write the coupling data.
 function writeData!(interface::LumpedInterface)
     # write the force at the quad points
     PreCICE.writeData("Solid-Nodes", "Forces", interface.ControlPointsID, interface.forces)
-    
+
     # do the coupling
     PreCICE.advance(interface.Δt[end]) # advance to t+Δt, check convergence and accelerate data
-    
+
     # read checkpoint if required or move on
     if PreCICE.requiresReadingCheckpoint()
         # revert the mesh

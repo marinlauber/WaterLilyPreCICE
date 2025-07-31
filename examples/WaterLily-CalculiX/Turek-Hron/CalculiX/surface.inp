@@ -1,6 +1,4 @@
-*Heading
- /home/marin/Workspace/WaterLilyPreCICE/examples/WaterLily-CalculiX/Turek-Hron/CalculiX/surface.inp
-*NODE
+*NODE,NSET=Ninterface
 1, 0, 4, -0.4
 2, 0, -4, -0.4
 3, 128, -4, -0.4

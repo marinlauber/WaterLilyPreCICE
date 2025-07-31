@@ -11,11 +11,13 @@ custom_attrib = Dict("u"=>vtk_velocity, "p"=>vtk_pressure, "d"=>vtk_body, "ω₃
 L,Re,U = 128,200,1
 R = 0.1L/0.41 # radius
 
+@inline C(t) = (tanh(4t-4.f0)+tanh(4.f0))/(1.f0+tanh(4.f0))
+
 # velocity profile of Turek-Hron
 function uBC(i,x::SVector{N,T},t) where {N,T}
     i ≠ 1 && return convert(T, 0.0)
     # make sure we have no velocity outside the channel
-    return max(convert(T, 1.5*U*((x[2]-1.5f0)/(L-3))*(1.0-(x[2]-1.5f0)/(L-3))/0.5^2), 0.f0)
+    return C(t)*max(convert(T, 1.5*U*((x[2]-1.5f0)/(L-3))*(1.0-(x[2]-1.5f0)/(L-3))/0.5^2), 0.f0)
 end
 
 # make a sim
@@ -29,8 +31,9 @@ sim = CoupledSimulation((6L,L), uBC, R; U, ν=U*R/Re, exitBC=true,
 wr = vtkWriter("Turek-Hron";attrib=custom_attrib)
 save!(wr, sim)
 
-# ramp for the impulse
-@inline C(t) = (tanh(4t-4)+tanh(4))/(1+tanh(4))
+# tophat impulse
+# @inline C(t) = (1-cos(2π*clamp(t,0,2)/2))/2 #(tanh(4t-4)+tanh(4))/(1+tanh(4))
+# @inline H(t,b,c) = exp(-clamp(t-b,-6c,6c)^2/(2c^2))
 
 # integrate in time
 while PreCICE.isCouplingOngoing()
@@ -39,10 +42,7 @@ while PreCICE.isCouplingOngoing()
     readData!(sim)
 
     # update the this participant and scale forces
-    sim_step!(sim); #sim.int.forces .*= sim.U^2/2sim.L
-    sim.int.forces[:,3] .= 0.0 # zero-spanwise forces
-    # sim_time(sim)<1 && sim.int.forces[:,2] .= C(sim_time(sim))*sim.U^2/2sim.L*sin(2π*sim_time(sim)) # add a small perturbation in the y-direction
-    println(sum(sim.int.forces,dims=1)./size(sim.int.forces,1)) # print the average force
+    sim_step!(sim)
 
     # write data to the other participant
     writeData!(sim)

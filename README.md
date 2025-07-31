@@ -119,7 +119,14 @@ The FSI cases have the following parameters, see [here](https://wwwold.mathemati
 
 ![](assets/turek-hron.gif)
 
-...
+### Interface type
+
+Load the `surface_mesh`, does not move it or scale it, use that to generate the `vertices` for the `preCICE` coupling. Then the a `MeshBody` is generated, where the geometry is scalled and move to the correct location. Here both the `mesh0` and `mesh` are the same. Only verticies are in the reference configuration.
+
+### MeshBody type
+
+Constructs a MeshBody, that old the reference mesh geometry in `mesh0`, this mesh is exactly as read from the file. The mapping and scaling is applied to the mesh in `mesh`, which is the mesh used for the coupling. The `MeshBody` type is used to hold the mesh information and the mapping between the two meshes.
+
 
 <!-- ### Lumped model interface -->
 

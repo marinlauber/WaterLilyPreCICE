@@ -26,14 +26,14 @@ function GismoInterface(T=Float64; dir=nothing, passive_bodies=nothing, center=0
     # get the mesh verticies from the fluid solver
     (_, knots) = getMeshVertexIDsAndCoordinates("KnotMesh")
     knots = knotVectorUnpack(knots)
-   
+
     # get the mesh verticies from the structural solver
     (ControlPointsID, ControlPoints) = getMeshVertexIDsAndCoordinates("ControlPointMesh")
     ControlPointsID = Array{Int32}(ControlPointsID)
     ControlPoints = getControlPoints(ControlPoints, knots)
     deformation = copy(ControlPoints)
     isnothing(dir) ? (direction = ones(length(ControlPoints))) : direction = dir
-    
+
     # get the quad points in parameter space
     (quadPointID, quadPoint) = getMeshVertexIDsAndCoordinates("ForceMesh")
     forces = zeros(reverse(size(quadPoint))...)
@@ -41,7 +41,7 @@ function GismoInterface(T=Float64; dir=nothing, passive_bodies=nothing, center=0
     quadPoint = quadPointUnpack(quadPoint)
 
     dt = PreCICE.getMaxTimeStepSize()
-    
+
     # construct the interface curves
     body = NoBody() # empty first body
     for (i,(cps,knot)) in enumerate(zip(ControlPoints,knots))
@@ -55,7 +55,7 @@ function GismoInterface(T=Float64; dir=nothing, passive_bodies=nothing, center=0
     # coupling interface
     interface = GismoInterface(ControlPointsID, ControlPoints, quadPointID, quadPoint, forces,
                                   deformation, knots, [dt], direction, length(bodies), center)
-    
+
     # add some passive_bodies if we want
     for b in passive_bodies
        body += b
@@ -72,7 +72,7 @@ function readData!(interface::GismoInterface)
     interface.deformation .= getDeformation(readData, interface.knots) # repack correctly
 end
 import ParametricBodies
-function update!(interface::GismoInterface, sim::CoupledSimulation; kwargs...)
+function update!(sim::CoupledSimulation, interface::GismoInterface; kwargs...)
     # update the geom as this has not been done yet
     for i in 1:interface.N
         new = interface.ControlPoints[i].+interface.deformation[i]

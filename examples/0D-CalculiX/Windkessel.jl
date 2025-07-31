@@ -43,7 +43,7 @@ function Windkessel!(du,u,p,t)
 
     # calculate Qmv, Pfilling>PLV; forward transmitral flow, PLV>Pfilling - backward transmitral flow
     Qmv = Pfill ≥ PLV ? (Pfill-PLV)/Rmv_fwd : (PLV-Pfill)/Rmv_bwd
-    
+
     #calculate Qao, PLV>Pao; forward aortic flow, PLV>Pao; backward aortic flow
     Qao = PLV ≥ Pao ? (PLV-Pao)/Rao_fwd : (Pao-PLV)/Rao_bwd
 

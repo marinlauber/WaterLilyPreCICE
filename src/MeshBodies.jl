@@ -15,6 +15,16 @@ mutable struct MeshBody{T,F<:Function} <: AbstractBody
     half_thk::T #half thickness
     boundary::Bool
 end
+
+"""
+    MeshBody(fname::String;map=(x,t)->x,scale=1.0,thk=0f0,boundary=true,T=Float32)
+
+Creates a `MeshBody` from a mesh file `fname`. The mesh can be in `.inp` format or any other format supported by `FileIO`.
+The `map` function is used to map the mesh points to a new location, where `x` is the point and `t` is the time.
+The `scale` parameter is used to scale the mesh, and `thk` is the half thickness of the body.
+If `boundary` is true, the mesh is treated as a boundary, otherwise it is treated as a volume.
+If the mesh is not a boundary, the distance is adjusted by the half thickness of the body.
+"""
 function MeshBody(fname::String;map=(x,t)->x,scale=1.0,thk=0f0,boundary=true,T=Float32)
     if endswith(fname,".inp")
         mesh0,srf_id = load_inp(fname)
@@ -24,8 +34,11 @@ function MeshBody(fname::String;map=(x,t)->x,scale=1.0,thk=0f0,boundary=true,T=F
     end
     return MeshBody(mesh0,srf_id,map,scale,thk,boundary,T)
 end
-MeshBody(mesh::M;map=(x,t)->x,scale=1.0,thk=0f0,boundary=true,T=Float32) where M<:GeometryBasics.Mesh = 
+
+MeshBody(mesh::M;map=(x,t)->x,scale=1.0,thk=0f0,boundary=true,T=Float32) where M<:GeometryBasics.Mesh =
          MeshBody(mesh,ntuple(i->(1,i),length(mesh)),map,scale,thk,boundary,T)
+
+
 function MeshBody(mesh0::M,srf_id,map,scale,thk,boundary,T) where M<:GeometryBasics.Mesh
     points = Point3f[] # scale and map the points to the corrcet location
     for (i,pnt) in enumerate(mesh0.position)
@@ -38,6 +51,12 @@ function MeshBody(mesh0::M,srf_id,map,scale,thk,boundary,T) where M<:GeometryBas
     bbox = Rect(bbox.origin.-max(4,thk),bbox.widths.+max(8,2thk))
     return MeshBody(copy(mesh),mesh0,velocity,srf_id,map,bbox,T(scale),T(thk/2),boundary)
 end
+
+"""
+    Base.copy(a::B) where B <: Union{GeometryBasics.Mesh, MeshBody}
+
+Creates a `copy` of the a `GeometryBasics.Mesh``, or a `MeshBody`.
+"""
 Base.copy(a::GeometryBasics.Mesh) = GeometryBasics.Mesh(a.position,GeometryBasics.faces(a));
 Base.copy(b::MeshBody) = MeshBody(copy(b.mesh),copy(b.mesh0),copy(b.velocity),b.surf_id,b.map,
                                   Rect(b.bbox),b.scale,b.half_thk,b.boundary)
@@ -159,34 +178,61 @@ WaterLily.sdf(body::MeshBody,x,t;kwargs...) = measure(body,x,t;kwargs...)[1]
     long as d>>O(1), this means that outside the bounding box, we return the distance of the bbox edges to the geom (d=8).
     If the mesh is not a boundary, we need to adjust the distance by the half thickness of the body.
 """
-function WaterLily.measure(body::MeshBody,x::SVector{D},t;kwargs...) where D
+function WaterLily.measure(body::MeshBody,x::SVector{D,T},t;kwargs...) where {D,T}
     # if x is 2D, we need to make it 3D
     D==2 && (x=SVector{3}(x[1],x[2],0))
     # if we are outside of the bounding box, we don't even to measure
-    outside(x,body.bbox) && return (max(8,2body.half_thk),zero(x),zero(x)) # we don't need to worry if the geom is a boundary or not
+    outside(x,body.bbox) && return (max(8,2body.half_thk),zeros(SVector{D,T}),zeros(SVector{D,T})) # we don't need to worry if the geom is a boundary or not
     d,n,v = measure(body.mesh,body.velocity,x;kwargs...)
     !body.boundary && (d = abs(d)-body.half_thk) # if the mesh is not a boundary, we need to adjust the distance
-    D==2 && (n=SVector{D}(n[1],n[2]); n=n/√sum(abs2,n))
+    D==2 && (n=SVector{D}(n[1],n[2]); n=n/√sum(abs2,n);
+             v=SVector{D}(v[1],v[2])) # if 2D, we need to make it 2D
     return (d,n,v)
 end
+"""
+    update!(body::MeshBody{T},t::T,dt=0;kwargs...)
+
+Updates the mesh body position at time `t` by applying the mapping `map` to the control points.
+
+    xᵢ(t+Δt) = map(x₀,t+Δt)
+    vᵢ(t+Δt) = (xᵢ(t+Δt) - xᵢ(t))/dt
+    where `x₀` is the initial position of the control point, `vᵢ` is the velocity at that control point.
+
+"""
 function update!(body::MeshBody{T},t::T,dt=0;kwargs...) where T
     # update mesh position, measure is done after
     points = Point3f[]
     for (i,pnt) in enumerate(body.mesh0.position)
         push!(points, Point3f(body.map(SA[pnt.data...]*body.scale,t)))
     end
-    # compute volecity and bounding box
-    _update!(body,points,dt)
+    # compute velocity and bounding box
+    update!(body,points,dt)
 end
+"""
+    update!(body::MeshBody{T},points::AbstractArray{T},dt=0;kwargs...)
+
+Updates the mesh body position ausing the given the new control position.
+
+    xᵢ(t+Δt) = x[i]
+    vᵢ(t+Δt) = (xᵢ(t+Δt) - xᵢ(t))/dt
+    where `x[i]` is the new (t+Δt) position of the control point, `vᵢ` is the velocity at that control point.
+
+"""
 function update!(body::MeshBody{T},points::AbstractArray{T},dt=0;kwargs...) where T
     # update mesh position, measure is done after
     points = Point3f[]
     for (i,pnt) in enumerate(points)
         push!(points, Point3f(SA[pnt.data...]*body.scale))
     end
-    # compute volecity and bounding box
-    _update!(body,points,dt)
+    # compute velocity and bounding box
+    update!(body,points,dt)
 end
+"""
+    update!(body::MeshBody{T},points::AbstractVector{Point{3,T}},dt=0)
+
+Updates the mesh body position using the given new control points as a vector of `Point{3,T}`.
+Note: This should not be needed by the user.
+"""
 function update!(body::MeshBody{T},points::AbstractVector{Point{3,T}},dt=0) where T
     # if nonzero time step, update the velocity field
     dt>0 && (body.velocity = GeometryBasics.Mesh((points-body.mesh.position)/dt,GeometryBasics.faces(body.mesh0)))
@@ -216,7 +262,7 @@ end
 
 Measure the distance `d` and normal `n` to the mesh at point `x` and time `t`.
 """
-function WaterLily.measure(mesh::M,velocity::M,x::SVector{T};kwargs...) where {M<:GeometryBasics.Mesh,T}
+function WaterLily.measure(mesh::GeometryBasics.Mesh,velocity::GeometryBasics.Mesh,x::SVector{T};kwargs...) where T
     u=1; a=b=d²_fast(mesh[1],x) # fast method
     for I in 2:length(mesh)
         b = d²_fast(mesh[I],x)
@@ -230,7 +276,7 @@ function WaterLily.measure(mesh::M,velocity::M,x::SVector{T};kwargs...) where {M
 end # 120.029 ns (0 allocations: 0 bytes)d # 4.266 μs (0 allocations: 0 bytes)
 
 # linear shape function interpolation of the nodal velocity values at point `p`
-function get_velocity(tri::Tr,vel::Tr,p::SVector{3,T}) where {Tr<:GeometryBasics.Ngon{3},T}
+function get_velocity(tri,vel,p::SVector{3,T}) where T
     dA = SVector{3,T}([sub_area(tri,p,Val{i}()) for i in 1:3])
     return SVector(sum(vel.points.*dA)/sum(dA))
 end
@@ -243,7 +289,12 @@ end
 volume(a::GeometryBasics.Mesh) = mapreduce(T->center(T).*dS(T),+,a)
 volume(body::MeshBody) = volume(body.mesh)
 
-import WaterLily: interp
+# check if the point `x` is inside the array `A`
+inA(x::SVector,A::AbstractArray) = (all(0 .≤ x) && all(x .≤ size(A).-2))
+function interp(x::SVector{D,T}, arr::AbstractArray{T,D}) where {D,T}
+    inA(x, arr) ? WaterLily.interp(x, arr) : zero(T)
+end
+
 function get_p(tri::GeometryBasics.Ngon{3},p::AbstractArray{T,3},δ,::Val{true}) where T
     c=center(tri); ds=dS(tri); n=hat(ds)
     ds.*interp(c + δ*n, p)
@@ -289,6 +340,10 @@ function get_p(tri::GeometryBasics.Ngon{3},p::AbstractArray{T,2},δ,::Val{true})
 end
 forces(a::GeometryBasics.Mesh, flow::Flow, δ=2, boundary=Val{true}()) = map(T->get_p(T, flow.p, δ, boundary), a)
 forces(body::MeshBody, b::Flow; δ=2) = forces(body.mesh, b, δ, Val{body.boundary}())
+forces(::AutoBody, ::Flow; kwargs...) = nothing
+function forces(a::WaterLily.SetBody, b::Flow; δ=2)
+    fa = forces(a.a, b; δ); isnothing(fa) ? forces(a.b, b; δ) : fa
+end
 
 using Printf: @sprintf
 import WaterLily
@@ -299,11 +354,26 @@ function WaterLily.save!(w,a::MeshBody,t=w.count[1]) #where S<:AbstractSimulatio
     k = w.count[1]
     points = hcat([[p.data...] for p ∈ a.mesh.position]...)
     cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, Base.to_index.(face)) for face in faces(a.mesh)]
-    vtk = vtk_grid(w.dir_name*@sprintf("/%s_%06i", w.fname, k), points, cells) 
+    vtk = vtk_grid(w.dir_name*@sprintf("/%s_%06i", w.fname, k), points, cells)
     for (name,func) in w.output_attrib
         # point/vector data must be oriented in the same way as the mesh
         vtk[name] = ndims(func(a))==1 ? func(a) : permutedims(func(a))
     end
     vtk_save(vtk); w.count[1]=k+1
     w.collection[round(t,digits=4)]=vtk
+end
+function WaterLily.save!(w,::AbstractBody,t) end # do nothing
+function WaterLily.save!(w,a::WaterLily.SetBody,t=w.count[1])
+    WaterLily.save!(w,a.a,t)
+    WaterLily.save!(w,a.b,t)
+end
+
+# pretty print
+function Base.show(io::IO, body::MeshBody{T}) where T
+    println(io, "MeshBody{$T}: ")
+    println(io, "    ├─ elements: $(length(body.mesh.faces))")
+    println(io, "    ├─ nodes:    $(length(body.mesh.position))")
+    println(io, "    ├─ boundary: $(body.boundary)")
+    body.boundary==false && println(io, "    ├─ half_thk: $(body.half_thk)")
+    println(io, "    ├─ scale: $(body.scale)")
 end

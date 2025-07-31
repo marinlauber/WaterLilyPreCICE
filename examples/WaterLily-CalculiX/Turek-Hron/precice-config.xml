@@ -50,14 +50,14 @@
   </coupling-scheme:serial-explicit> -->
 
   <coupling-scheme:parallel-implicit>
-    <participants first="WaterLily" second="Calculix"/>
-    <max-time value="10.0" />
+    <participants first="Calculix" second="WaterLily"/>
+    <max-time value="100.0" />
     <time-window-size value="0.005"/>
     <exchange data="Displacements" mesh="Solid-Mesh" from="Calculix" to="WaterLily"/>
     <exchange data="Forces" mesh="Solid-Mesh" from="WaterLily" to="Calculix"/>
     <max-iterations value="50"/>
-    <relative-convergence-measure limit="1e-4" data="Displacements" mesh="Solid-Mesh"/>
-    <relative-convergence-measure limit="1e-4" data="Forces" mesh="Solid-Mesh"/>
+    <relative-convergence-measure limit="5e-3" data="Displacements" mesh="Solid-Mesh"/>
+    <relative-convergence-measure limit="5e-3" data="Forces" mesh="Solid-Mesh"/>
     <acceleration:IQN-ILS>
       <data name="Displacements" mesh="Solid-Mesh" />
       <data name="Forces" mesh="Solid-Mesh" />
