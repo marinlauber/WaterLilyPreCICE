@@ -173,8 +173,7 @@ WaterLily.sdf(body::MeshBody,x,t;kwargs...) = measure(body,x,t;kwargs...)[1]
     measure(body::MeshBody,x,t;kwargs...)
 
     Measures a mesh body at point `x` and time `t`.
-    If a mapping has been specified, the point `x` is first map to the new location `ξ`, and the mesh is measured there.
-    We use a large bounding box around the mesh to avoid measuring  far away, where the actual distance doesn't matter as
+    We use a large bounding box around the mesh to avoid measuring far away, where the actual distance doesn't matter as
     long as d>>O(1), this means that outside the bounding box, we return the distance of the bbox edges to the geom (d=8).
     If the mesh is not a boundary, we need to adjust the distance by the half thickness of the body.
 """
@@ -243,20 +242,13 @@ function update!(body::MeshBody{T},points::AbstractVector{Point{3,T}},dt=0) wher
 end
 
 using LinearAlgebra: cross
-"""
-    normal(tri::GeometryBasics.Ngon{3})
-
-Return the normal vector to the triangle `tri`.
-"""
-function normal(tri::GeometryBasics.Ngon{3}) #3.039 ns (0 allocations: 0 bytes)
-    hat(cross(SVector(tri.points[2]-tri.points[1]),SVector(tri.points[3]-tri.points[1])))
-end
+@inbounds @inline normal(tri::GeometryBasics.Ngon{3}) = hat(dS(tri))
 @inbounds @inline hat(v) = v/(√(v'*v)+eps(eltype(v)))
 @inbounds @inline d²_fast(tri::GeometryBasics.Ngon{3},x) = sum(abs2,x-center(tri)) #1.825 ns (0 allocations: 0 bytes)
 @inbounds @inline d²(tri::GeometryBasics.Ngon{3},x) = sum(abs2,x-locate(tri,x)) #4.425 ns (0 allocations: 0 bytes)
 @inbounds @inline center(tri::GeometryBasics.Ngon{3}) = SVector(sum(tri.points)/3.f0...) #1.696 ns (0 allocations: 0 bytes)
-@inbounds @inline area(tri::GeometryBasics.Ngon{3}) = 0.5f0*√sum(abs2,cross(SVector(tri.points[2]-tri.points[1]),SVector(tri.points[3]-tri.points[1]))) #1.784 ns (0 allocations: 0 bytes)
-@inbounds @inline dS(tri::GeometryBasics.Ngon{3}) = 0.5f0cross(SVector(tri.points[2]-tri.points[1]),SVector(tri.points[3]-tri.points[1]))
+@inbounds @inline area(tri::GeometryBasics.Ngon{3}) = 0.5f0*√sum(abs2,cross(tri.points[2]-tri.points[1],tri.points[3]-tri.points[1])) #1.784 ns (0 allocations: 0 bytes)
+@inbounds @inline dS(tri::GeometryBasics.Ngon{3}) = 0.5f0SVector(cross(tri.points[2]-tri.points[1],tri.points[3]-tri.points[1]))
 """
     measure(mesh::GeometryBasics.Mesh,x,t;kwargs...)
 
@@ -286,8 +278,16 @@ end
 
 # use divergence theorem to calculate volume of surface mesh
 # F⃗⋅k⃗ = -⨕pn⃗⋅k⃗ dS = ∮(C-ρgz)n⃗⋅k⃗ dS = ∫∇⋅(C-ρgzk⃗)dV = ρg∫∂/∂z(ρgzk⃗)dV = ρg∫dV = ρgV #
-volume(a::GeometryBasics.Mesh) = mapreduce(T->center(T).*dS(T),+,a)
+volume(a::GeometryBasics.Mesh) = mapreduce(T->∮(x->x,T).*dS(T),+,a)
 volume(body::MeshBody) = volume(body.mesh)
+
+# integrate a function, second order
+function ∮(func::Function, dT::GeometryBasics.Ngon{3})
+    Int = func(0.5f0*dT.points[1] + 0.5f0*dT.points[2])
+    Int += func(0.5f0*dT.points[2] + 0.5f0*dT.points[3])
+    Int += func(0.5f0*dT.points[1] + 0.5f0*dT.points[3])
+    return Int/3.0
+end
 
 # check if the point `x` is inside the array `A`
 inA(x::SVector,A::AbstractArray) = (all(0 .≤ x) && all(x .≤ size(A).-2))
@@ -338,6 +338,13 @@ function get_p(tri::GeometryBasics.Ngon{3},p::AbstractArray{T,2},δ,::Val{true})
     p = ar.*n*interp(c + δ*n, p)
     return SA[p[1],p[2],zero(T)]
 end
+
+"""
+    forces(a::AbstractBody, flow::Flow; δ=2)
+
+Calculates the forces on the body `a` in the flow `flow` using a distance `δ` to the surface.
+Only if the body is a `MeshBody` the forces are calculated.
+"""
 forces(a::GeometryBasics.Mesh, flow::Flow, δ=2, boundary=Val{true}()) = map(T->get_p(T, flow.p, δ, boundary), a)
 forces(body::MeshBody, b::Flow; δ=2) = forces(body.mesh, b, δ, Val{body.boundary}())
 forces(::AutoBody, ::Flow; kwargs...) = nothing

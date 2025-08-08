@@ -64,7 +64,7 @@ function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)
 
     # mapping from center to nodes, needed for the forces
     forces = zeros(T, size(ControlPoints))
-    vertices .= 0 # reset since tey become the displacements
+    vertices .= 0 # reset since they become the displacements
     map_id = map(((i,F),)->vcat(Base.to_index.(F).data...),enumerate(faces(mesh)))
 
     # time step
@@ -217,7 +217,7 @@ function WaterLily.save!(w,a::LumpedInterface)
     k = w.count[1]
     points = hcat([[p.data...] for p ∈ a.mesh0.position]...)
     cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, Base.to_index.(face)) for face in faces(a.mesh0)]
-    vtk = vtk_grid(w.dir_name*@sprintf("/%s_%06i", w.fname, k), points, cells) 
+    vtk = vtk_grid(w.dir_name*@sprintf("/%s_%06i", w.fname, k), points, cells)
     for (name,func) in w.output_attrib
         # point/vector data must be oriented in the same way as the mesh
         vtk[name] = ndims(func(a))==1 ? func(a) : permutedims(func(a))
