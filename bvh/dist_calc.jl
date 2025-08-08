@@ -5,8 +5,14 @@ using GeometryBasics
 include("src/mesh_body.jl")
 include("src/bvh_builder.jl")
 include("src/util.jl")
+include("src/plot_box.jl")
 
 
+file="/home/marin/Workspace/WaterLilyPreCICE_KD/bvh/obj/dragon_15k.obj" # 0 allocs
+mesh=load(file)
+# mesh = load("obj/"*file*".obj") # 81745 allocations!
+@benchmark bvh=BVH_simple($mesh,4,overlap=2)
+bvh=BVH_simple(mesh,6,overlap=2)
 
 function find_dist(mesh::M,x::SVector{T};kwargs...) where {M<:GeometryBasics.Mesh,T}
     u=1; a=b=d²_fast(mesh[1],x) # fast method
@@ -17,12 +23,11 @@ function find_dist(mesh::M,x::SVector{T};kwargs...) where {M<:GeometryBasics.Mes
     n,p = normal(mesh[u]),SVector(locate(mesh[u],x))
     s = x-p # signed Euclidian distance
     d = sign(sum(s.*n))*√sum(abs2,s)
-    # v = get_velocity(mesh[u],velocity[u],p)
-    return d,n,zero(x) #v
+    return d,n,zero(x)
 end # 120.029 ns (0 allocations: 0 bytes)d # 4.266 μs (0 allocations: 0 bytes)
 
 
-@benchmark s_t=find_dist($bvh.entries[4],$SVector(40.0,30.0,20.0))
+@benchmark s_t=find_dist($bvh.entries[8],$SVector(40.0,30.0,20.0))
 
 @benchmark stt=find_dist($mesh,$SVector(40.0,30.0,20.0))
 
@@ -40,7 +45,7 @@ function find_box(x::CartesianIndex{3}, bvh::BVH_simple) where T
     stack=[1]
     count=0
     sol=25
-    while !isempty(stack)  
+    while !isempty(stack)
         i=pop!(stack)   #implicit index
         box= bvh.all_nodes[i] #box from memory index
         # println("we are checking box ", i)
@@ -66,7 +71,7 @@ function find_box(x::CartesianIndex{3}, bvh::BVH_simple) where T
 #    return sol
 end
 
-s_t=find_dist(bvh.entries[4],SVector(40.0,30.0,20.0))
+s_t=find_dist(bvh.entries[8],SVector(40.0,30.0,20.0))
 
 
 function find_box_fsm(x::CartesianIndex{3},bvh::BVH_simple) where T
@@ -150,12 +155,34 @@ function find_box_fsm(x::CartesianIndex{3},bvh::BVH_simple) where T
 
         end
     end
-# return matching_leaves[1:count],sol
-return sol
+    # return matching_leaves[1:count],sol
+    return sol
 end
 
-point=CartesianIndex((160,50,85))
+function inbox(x::SVector{3,T}, box::BoundBox) where T
+    all((box.lo .<= x) .& (x .<= box.up)) || all((box.up .<= x) .& (x .<= box.lo))
+end
 
+function full_mesh_dist(x::CartesianIndex{3},mesh,box)
+    x=SVector{3,Int}(Tuple(x))
+    # println(x)
+
+    # function inbox(x, box::BoundBox{U}) where U
+    #     all((box.lo .<= x) .& (x .<= box.up)) || all((box.up .<= x) .& (x .<= box.lo))
+    # end
+
+    if inbox(x,box)
+        sol=find_dist(mesh,x)[1]
+    else
+        sol=25
+    end
+
+    return sol
+end
+
+
+point=CartesianIndex((160,50,85))
+box = Bounding_BBox(mesh, 4, Float64)
 
 @benchmark find_box_fsm($point,$bvh)
 @benchmark find_box($point,$bvh)
@@ -165,36 +192,11 @@ find_box(point,bvh)
 full_mesh_dist(point,mesh,box)
 #correct answer checking
 
-
-
-function full_mesh_dist(x::CartesianIndex{3},mesh,box)
-    x=SVector{3,Int}(Tuple(x))
-    # println(x)
-
-    function inbox(x, box::BoundBox{U}) where U
-        all((box.lo .<= x) .& (x .<= box.up)) || all((box.up .<= x) .& (x .<= box.lo))
-    end
-
-    if inbox(x,box)
-        sol=find_dist(mesh,x)[1]
-    else
-        sol=25
-    end
-        
-    return sol
-end
-
-function inbox(x::SVector{3,T}, box::BoundBox{U}) where {T,U}
-    all((box.lo .<= x) .& (x .<= box.up)) || all((box.up .<= x) .& (x .<= box.lo))
-end
-
-
-
-file="obj/dragon_15k.obj" # 0 allocs
-mesh=load(file)
-# mesh = load("obj/"*file*".obj") # 81745 allocations!
-@benchmark bvh=BVH_simple($mesh,4,overlap=2)
-bvh=BVH_simple(mesh,6,overlap=2)
+# file="obj/dragon_15k.obj" # 0 allocs
+# mesh=load(file)
+# # mesh = load("obj/"*file*".obj") # 81745 allocations!
+# @benchmark bvh=BVH_simple($mesh,4,overlap=2)
+# bvh=BVH_simple(mesh,6,overlap=2)
 
 # 1 lvl 62 allocs 146 μs
 # 4 lvl 249 allocs 689 μs
@@ -212,29 +214,32 @@ begin #box for
     box=expand_box(box,2)
 end
 
-@benchmark begin 
+function make_and_fill_dist(mesh,dist_field_bvh)
     bvh=BVH_simple(mesh,6,overlap=2)
-    @inside dist_field[I]=find_box(I,bvh)
+    @inside dist_field_bvh[I]=find_box(I,bvh)
 end
+
+#@TODO very bad
+@benchmark make_and_fill_dist($mesh,$dist_field_bvh)
 
 @inside dist_field_bvh[I]=find_box(I,bvh); println("bvh done")
 @inside dist_field_fsm[I]= find_box_fsm(I,bvh); println("fsm done")
 @inside dist_field_mesh[I]=full_mesh_dist(I,mesh,box); println("mesh done")
 
 println("benchmark bvh")
-@benchmark begin 
+@benchmark begin
     bvh=BVH_simple($mesh,6,overlap=2)
     @inside dist_field_bvh[I]=find_box(I,bvh)
 end
 
 println("benchmark fsm")
-@benchmark begin 
+@benchmark begin
     bvh=BVH_simple($mesh,6,overlap=2)
     @inside dist_field_fsm[I]=find_box_fsm(I,bvh)
 end
 
 println("benchmark mesh")
-@benchmark begin  
+@benchmark begin
     box=Rect($mesh)
     box=boxtobox(box)
     box=expand_box(box,2)
@@ -247,13 +252,8 @@ store_vtk(dist_field_mesh,"dragon_mesh")
 
 
 
-for I in CartesianIndices(dist_field)
-    # x = SVector{3, Int}(Tuple(I)) 
-    dist_field[I]=find_box(I,bvh)[2]
-end
-
 begin
-    
+
     # x=SVector(50.0,20.0,62.0)
     x=CartesianIndex((160,50,85))
     # plots for debugging
@@ -261,20 +261,20 @@ begin
     ax = Axis3(fig[1, 1])
     # # boxes=vcat(bvh.nodes,bvh.leaves)
     stack_boxes=find_box(x,bvh)
-    
+
     # fsm_boxes,fsm_sol=find_box_fsm(x,bvh)
-    
+
     # fsm2_boxes,fsm2_sol=find_box_fsm2(x,bvh)
     # box_tocheck=3
     println("stack ",stack_boxes)
     # println("fsm ", fsm_boxes,fsm_sol)
-    
+
     # println("fsm2 ", fsm2_boxes,fsm2_sol)
     wireframe!(ax, bvh.mesh, color = "black", ssao = true)
-    
+
     # lines!(ax, boxes_lines(bvh.SubD), linewidth = 2, color = "grey", linestyle=:dash)
-    
-    
+
+
     # lines!(ax, boxes_lines([bvh.SubD[box_tocheck]]), linewidth = 2, color = "red", linestyle=:dash)
     # lines!(ax, boxes_lines(bvh.leaves), linewidth = 2, color = "grey")
     lines!(ax, boxes_lines(bvh.leaves), linewidth = 2, color = "red")
@@ -285,4 +285,3 @@ begin
     scatter!(ax, [Point3f(x)], color = :green, markersize = 15)
     fig
 end
-    

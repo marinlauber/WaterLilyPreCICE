@@ -264,7 +264,7 @@ using Printf: @sprintf
 import WaterLily
 using WriteVTK
 # access the WaterLily writer to save the file
-function WaterLily.write!(w,a::MeshBody)
+function WaterLily.save!(w,a::MeshBody)
     k = w.count[1]
     points = hcat([[p.data...] for p ∈ a.mesh.position]...)
     cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, Base.to_index.(face)) for face in faces(a.mesh)]
