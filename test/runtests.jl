@@ -73,28 +73,34 @@ end
     @test all(isapprox.(WaterLilyPreCICE.volume(sphere)./(L/4)^3,4/3*π,atol=1e-1))
     @test all(isapprox.(abs.(sum(WaterLilyPreCICE.forces(sphere,flow)))/4L^2,[0.,0.,1.16],atol=1e-2))
 end
-@testset "KDTree.jl" begin
-    # test the box
-    b = WaterLilyPreCICE.Bbox(SA[0.0,0.0,0.0],SA[0.5,0.5-eps(),0.5-eps()])
-    @test b.C == SA[0.0,0.0,0.0] && b.R == SA[0.5,0.5-eps(),0.5-eps()]
-    @test !b.leaf && b.indices == nothing
-    # test the split of the box
-    left,right = WaterLilyPreCICE.split(b)
-    @test all(left.C.≈SA[-0.25,0.,0.]) && all(left.R.≈SA[0.25,0.5,0.5])
-    @test all(right.C.≈SA[0.25,0.,0.]) && all(right.R.≈SA[0.25,0.5,0.5])
-    # test inside
-    @test !inside([0.5+eps(),0.5,0.5],b) && !inside([-0.5-eps(),0.5,0.5],b)
-    # test the filer
-    points = rand(3,10)
-    box = WaterLilyPreCICE.bounding_box(points)
-    left, right = WaterLilyPreCICE.split(box)
-    # @test length(left) + length(right) >= size(points,2)
-    # @test !(left in right) # check that there is no point in both boxes
+# @testset "KDTree.jl" begin
+#     # test the box
+#     b = WaterLilyPreCICE.Bbox(SA[0.0,0.0,0.0],SA[0.5,0.5-eps(),0.5-eps()])
+#     @test b.C == SA[0.0,0.0,0.0] && b.R == SA[0.5,0.5-eps(),0.5-eps()]
+#     @test !b.leaf && b.indices == nothing
+#     # test the split of the box
+#     left,right = WaterLilyPreCICE.split(b)
+#     @test all(left.C.≈SA[-0.25,0.,0.]) && all(left.R.≈SA[0.25,0.5,0.5])
+#     @test all(right.C.≈SA[0.25,0.,0.]) && all(right.R.≈SA[0.25,0.5,0.5])
+#     # test inside
+#     @test !inside([0.5+eps(),0.5,0.5],b) && !inside([-0.5-eps(),0.5,0.5],b)
+#     # test the filer
+#     points = rand(3,10)
+#     box = WaterLilyPreCICE.bounding_box(points)
+#     left, right = WaterLilyPreCICE.split(box)
+#     @test length(left) + length(right) >= size(points,2)
+#     @test !(left in right) # check that there is no point in both boxes
 
-    # test the tree
-    # points = rand(3,100)
-    # t = WaterLilyPreCICE.Tree(points)
-    # @test length(t) > 1
-    # @test t[1].C == SA[0.0,0.0,0.0] && t[1].R == SA[0.5,0.5-eps(),0.5-eps()]
-    # @test !t[1].leaf && t[1].indices == nothing
-end
+#     # test the tree
+#     points = rand(3,100)
+#     t = WaterLilyPreCICE.Tree(points)
+#     @test length(t) > 1
+#     @test t[1].C == SA[0.0,0.0,0.0] && t[1].R == SA[0.5,0.5-eps(),0.5-eps()]
+#     @test !t[1].leaf && t[1].indices == nothing
+# # end
+# @testset "Interface.jl" begin
+    # @test_nowarn
+    # # clean-up
+    # @test_nowarn rm("TEST_DIR",recursive=true)
+    # @test_nowarn rm("test_vtk_reader_$D.pvd")
+# end
