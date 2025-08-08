@@ -15,25 +15,26 @@ A4(ts) = ts<=5 ? 0 : 2Gaussian((ts-5)/20;μ=0.35,σ=0.08) #Elastance((ts-10)/20)
 
 data = jldopen("/home/marin/Workspace/WaterLilyPreCICE/examples/0D-CalculiX/Pouch/Fluid/pouch_volume.jld2")
 
-begin 
+begin
     ti = data["time"]
     Plots.plot(ti,data["intV"][1:end-1],label="V_v", ylim=(0.,0.25))
     Plots.plot!(ti,data["intP"][1:end-1],label="P_v")
+    Plots.plot!(ti,data["q"],label="Q")
     Plots.plot!(0:0.01:14,0.21*A4.(0:0.01:14)/2,label="P_act/2")
 end
 
-time = collect(0:0.1:100)
+# time = collect(0:0.1:100)
 
-Plots.plot(time, Elastance.(time/20))
-Plots.plot!(time, Gaussian.(time/20;μ=0.35,σ=0.08))
+# Plots.plot(time, Elastance.(time/20))
+# Plots.plot!(time, Gaussian.(time/20;μ=0.35,σ=0.08))
 
-Plots.plot(data["time"],data["q"], ylims=(0,0.05))
-Plots.plot(data["intdt"])
-Plots.plot(data["intP"])
-Plots.plot(data["intV"])
+# Plots.plot(data["time"],data["q"], ylims=(0,0.05))
+# Plots.plot(data["intdt"])
+# Plots.plot(data["intP"])
+# Plots.plot(data["intV"])
 
-Plots.plot!(t.+10, u1,label="u1")
-Plots.plot!(t.+10, u2,label="u2")
+# Plots.plot!(time.+10, u1,label="u1")
+# Plots.plot!(time.+10, u2,label="u2")
 # function sub_mesh(b, srf)
 #     points = Point3f[] # scale and map the points to the correct location
 #     faaces = TriangleFace[]

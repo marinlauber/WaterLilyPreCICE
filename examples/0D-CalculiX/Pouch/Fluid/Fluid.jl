@@ -15,7 +15,7 @@ function Windkessel_P!(du,u,p,t)
 
     # dVdt is a prescribed function
     dVdt = Q
-    
+
     # what way is the flow going in the aortic valve?
     Qa = dVdt < -eps() ? -dVdt : (Pa - Plv)/1e5 # diastole, very small flow
     Qv = dVdt >  eps() ?  dVdt : (Plv - Pv)/1e5 # systole, very small flow
@@ -23,12 +23,12 @@ function Windkessel_P!(du,u,p,t)
     # pressure in the ventricle
     Plv = dVdt > eps() ? Pv - dVdt*Rv : (dVdt < -eps() ? -dVdt*Ra + Pa : Plv)
     abs(dVdt) > 1e-6 && (u[1] = Plv) # store to access after
-    
+
     # rates
     du[1] = 0 # empty
-    du[2] = 0                     # dPlv/dt  
+    du[2] = 0                     # dPlv/dt
     du[3] = Qa/Ca - (Pa-Pv)/(Rp*Ca)  # dPa/dt
-    du[4] = (Pa-Pv)/(Rp*Cv) - Qv/Cv  # dVv/dt  
+    du[4] = (Pa-Pv)/(Rp*Cv) - Qv/Cv  # dVv/dt
 end
 
 tspan = (0,90)
@@ -114,7 +114,7 @@ while PreCICE.isCouplingOngoing()
 
     # read the data from the other participant
     readData!(interface) # sets sum(Δt) = t+Δt
-   
+
     # compute the pressure forces
     push!(interface.P, 0.21) # 0.35kPa time varying
     WaterLilyPreCICE.update!(interface; integrate=false)

@@ -33,7 +33,7 @@
  Ninterface, 3, 0.0
 
 *NODE FILE,OUTPUT=2D,FREQUENCY=5
- U, 
+ U,
 *EL FILE
  E, ME, S
 *END STEP
