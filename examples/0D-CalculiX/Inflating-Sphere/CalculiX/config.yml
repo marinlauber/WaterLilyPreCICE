@@ -7,4 +7,4 @@ participants:
           write-data: [Displacements]
           read-data: [Forces]
 
-precice-config-file: ../precice-config.xml
+precice-config-file: ../precice-config-interface.xml

@@ -25,7 +25,7 @@
   </mesh>
 
   <participant name="WaterLily">
-    <export:vtp every-n-time-windows="5" directory="vtp/" every-iteration="0"/>
+    <!-- <export:vtp every-n-time-windows="5" directory="vtp/" every-iteration="0"/> -->
     <provide-mesh name="Fluid-Mesh" />
     <receive-mesh name="Solid-Mesh" from="Calculix" />
     <write-data name="Forces" mesh="Fluid-Mesh" />
@@ -35,7 +35,7 @@
   </participant>
 
   <participant name="Calculix">
-    <export:vtp every-n-time-windows="5" directory="vtp/" every-iteration="0"/>
+    <!-- <export:vtp every-n-time-windows="5" directory="vtp/" every-iteration="0"/> -->
     <provide-mesh name="Solid-Mesh" />
     <write-data name="Displacements" mesh="Solid-Mesh" />
     <read-data name="Forces" mesh="Solid-Mesh" />
@@ -43,11 +43,33 @@
 
   <m2n:sockets acceptor="WaterLily" connector="Calculix" exchange-directory=".."/>
 
-  <coupling-scheme:serial-explicit>
+  <!-- <coupling-scheme:serial-explicit>
     <participants first="WaterLily" second="Calculix"/>
-    <max-time value="20.0" />
-    <time-window-size value="-1" method="first-participant"/>
+    <max-time value="5.0" />
+    <time-window-size value="0.005"/>
     <exchange data="Displacements" mesh="Solid-Mesh" from="Calculix" to="WaterLily"/>
     <exchange data="Forces" mesh="Solid-Mesh" from="WaterLily" to="Calculix"/>
-  </coupling-scheme:serial-explicit>
+  </coupling-scheme:serial-explicit> -->
+
+  <coupling-scheme:parallel-implicit>
+    <participants first="Calculix" second="WaterLily"/>
+    <max-time value="1.0" />
+    <time-window-size value="0.01" />
+    <max-iterations value="10"/>
+    <exchange data="Displacements" mesh="Solid-Mesh" from="Calculix" to="WaterLily"/>
+    <exchange data="Forces" mesh="Solid-Mesh" from="WaterLily" to="Calculix"/>
+    <relative-convergence-measure limit="1e-3" data="Displacements" mesh="Solid-Mesh"/>
+    <relative-convergence-measure limit="1e-3" data="Forces" mesh="Solid-Mesh"/>
+    <acceleration:IQN-ILS>
+      <data name="Forces" mesh="Solid-Mesh"/>
+      <data name="Displacements" mesh="Solid-Mesh"/>
+      <preconditioner type="residual-sum"/>
+      <filter type="QR2" limit="1e-2"/>
+      <initial-relaxation value="0.01"/>
+      <max-used-iterations value="50"/>
+      <time-windows-reused value="10"/>
+    </acceleration:IQN-ILS>
+  </coupling-scheme:parallel-implicit>
+
+
 </precice-configuration>

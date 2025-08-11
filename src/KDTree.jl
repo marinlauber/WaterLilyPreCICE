@@ -1,6 +1,6 @@
 using StaticArrays
 using WaterLily
-# using BenchmarkTools
+using BenchmarkTools
 # using Plots
 using GeometryBasics
 
@@ -89,9 +89,10 @@ WaterLily.inside(x,b::Union{Tree,Bbox})::Bool = (all(b.C-b.R .≤ x) && all(x .�
 # end
 
 function bounding_box(points::AbstractArray{T,2};δ=1e-2) where T
-    # vmax = SVector(ntuple(i->typemin(T),size(points,1)))
-    vmax = SVector{3}(typemin(T),typemin(T),typemin(T))
-    vmin = SVector{3}(typemax(T),typemax(T),typemax(T))
+    vmax = SVector(ntuple(i->typemin(T),size(points,1)))
+    vmin = SVector(ntuple(i->typemin(T),size(points,1)))
+    # vmax = SVector{3}(typemin(T),typemin(T),typemin(T))
+    # vmin = SVector{3}(typemax(T),typemax(T),typemax(T))
     for p in eachcol(points)
         p = SA[p...] # convert to static array
         vmin = min.(p, vmin)
@@ -178,33 +179,34 @@ dist(C,R,x) = √sum(abs2,max.(0,abs.(x-C)-R))+min(R...) # distance to a bbox
 dist(points,x) = √minimum(sum(abs2,points.-x,dims=1)) # distance to points
 brute_force(points,x) = √minimum(sum(abs2,points.-x,dims=1))
 
+using Plots
 
-# # make a simple tree
-# N = 2^8
-# points = rand(2,N)
-# # try a circle
-# points[1,:] .= N*cos.(range(0,stop=2π,length=N)) .+ 2N
-# points[2,:] .= N*sin.(range(0,stop=2π,length=N)) .+ 2N
-# segments = map(i->[i,i%N+1],1:N) # connectivity of nodes
+# make a simple tree
+N = 2^8
+points = rand(2,N)
+# try a circle
+points[1,:] .= N*cos.(range(0,stop=2π,length=N)) .+ 2N
+points[2,:] .= N*sin.(range(0,stop=2π,length=N)) .+ 2N
+segments = map(i->[i,i%N+1],1:N) # connectivity of nodes
 
-# # make a tree
-# tree = Tree(points; Nmax=64);
+# make a tree
+tree = Tree(points; Nmax=64);
 
-# let
-#     plot(title="KDTree",dpi=300, aspect_ratio=:equal,legend=:none)
-#     for (i,b) in enumerate(tree.boxes)
-#         b.C==b.R && continue # dummy box
-#         p1 = b.C - b.R
-#         p2 = b.C + SA[b.R[1],-b.R[2]]
-#         p3 = b.C + b.R
-#         p4 = b.C - SA[b.R[1],-b.R[2]]
-#         plot!([p1[1],p2[1],p3[1],p4[1],p1[1]],[p1[2],p2[2],p3[2],p4[2],p1[2]],
-#                color=:black, lw=2,fill=false,alpha=0.3,label=:none)
-#         c = ifelse(b.leaf,:forestgreen,:brown3)
-#         annotate!(b.C[1], b.C[2], ("$i", 16, c, :center))
-#     end
-#     plot!(points[1,:],points[2,:],seriestype=:scatter,label=:none)
-# end
+let
+    plot(title="KDTree",dpi=300, aspect_ratio=:equal,legend=:none)
+    for (i,b) in enumerate(tree.boxes)
+        b.C==b.R && continue # dummy box
+        p1 = b.C - b.R
+        p2 = b.C + SA[b.R[1],-b.R[2]]
+        p3 = b.C + b.R
+        p4 = b.C - SA[b.R[1],-b.R[2]]
+        plot!([p1[1],p2[1],p3[1],p4[1],p1[1]],[p1[2],p2[2],p3[2],p4[2],p1[2]],
+               color=:black, lw=2,fill=false,alpha=0.3,label=:none)
+        c = ifelse(b.leaf,:forestgreen,:brown3)
+        annotate!(b.C[1], b.C[2], ("$i", 16, c, :center))
+    end
+    plot!(points[1,:],points[2,:],seriestype=:scatter,label=:none)
+end
 
 # # test some measure
 # x = 2rand(SVector{2}).-1
@@ -216,7 +218,7 @@ brute_force(points,x) = √minimum(sum(abs2,points.-x,dims=1))
 # @btime measure($tree,$x) #69 ns (7 allocations: 208 bytes) # 1.212 μs (37 allocations: 2.70 KiB)
 # @btime brute_force($points,$x) #1.689 μs (10 allocations: 6.25 KiB)
 
-# # test on a grid
+# test on a grid
 # M = 2^10
 # σ = zeros(M,M)
 # @btime @inside σ[I] = WaterLily.μ₀(brute_force(tree.points,loc(0,I)).-4,1) # 887.248 ms (13578572 allocations: 6.27 GiB)

@@ -2,8 +2,7 @@ using WaterLilyPreCICE,StaticArrays
 
 # just a mesh
 L,Re,U = 2^5,100,1
-map(x,t) = x .- SA[L,L,L/2]
-body = MeshBody(joinpath(@__DIR__,"../../meshes/sphere.inp");map,scale=L/2)
+body = MeshBody(joinpath(@__DIR__,"../../meshes/sphere.inp");scale=L/2)
 
 let
     # keyword aguments might be specified
@@ -18,14 +17,15 @@ let
 
     # get nodes and elements IDS from precice
     numberOfVertices, dimensions = length(body.mesh.position), 3
-    vertices = Array{Float64,2}(undef, numberOfVertices, dimensions)
+    vertices = Array{Float64,2}(undef, dimensions, numberOfVertices)
+    # @TODO use mesh0 since it is unscaled and unmapped
     for i in 1:numberOfVertices
-        vertices[i,:] .= body.mesh.position[i].data
+        vertices[:,i] .= body.mesh0.position[i].data
     end
-    ControlPointsID = PreCICE.setMeshVertices("Solid-Mesh", vertices)
+    ControlPointsID = PreCICE.setMeshVertices("Solid-Mesh", reshape(vertices, (:,3)))
 
     # storage arrays
-    deformation = zero(vertices)
+    deformation = zeros(Float64, numberOfVertices, dimensions)
 
     # initilise PreCICE
     PreCICE.initialize()
@@ -45,11 +45,11 @@ let
         readData = PreCICE.readData("Solid-Mesh", "Forces", ControlPointsID, dt)
 
         # update the this participant
-        deformation .+= 1.0
+        deformation[:,1] .+= dt/L # small increment
 
         # write data to the other participant
         PreCICE.writeData("Solid-Mesh", "Displacements", ControlPointsID, deformation)
-        
+
         # advance coupling
         dt = PreCICE.advance(dt)
         # read checkpoint if required or move on

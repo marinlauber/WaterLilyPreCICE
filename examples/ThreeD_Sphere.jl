@@ -12,7 +12,7 @@ end
 # make a writer with some attributes to output to the file
 vtk_velocity(a::Simulation) = a.flow.u |> Array;
 vtk_pressure(a::Simulation) = a.flow.p |> Array;
-vtk_body(a::Simulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a.flow)); a.flow.σ |> Array;) 
+vtk_body(a::Simulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a.flow)); a.flow.σ |> Array;)
 vtk_mu0(a::Simulation) = a.flow.μ₀ |> Array;
 custom_attrib = Dict("u"=>vtk_velocity, "p"=>vtk_pressure, "d"=>vtk_body, "μ₀"=>vtk_mu0)
 # vtk attributes
@@ -33,7 +33,7 @@ t₀,duration,step = 0.,10.0,0.1
 @time for tᵢ in range(t₀,t₀+duration;step)
     # update until time tᵢ in the background
     sim_step!(sim,tᵢ;remeasure=false)
-    write!(wr, sim); write!(wr_mesh, sim.body)
+    save!(wr, sim); save!(wr_mesh, sim.body)
     fm = 2sum(WaterLilyPreCICE.forces(sim.body, sim.flow))/(sim.L/2)^2
     println("Surface pressure force: ", round.(fm,digits=4))
     pf = 2WaterLily.pressure_force(sim)/(sim.L/2)^2

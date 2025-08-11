@@ -13,3 +13,5 @@
 *.out
 *.sta
 */WarnNodeMissMultiStage.nam
+examples/0D-CalculiX/Pouch/
+examples/LIMO_4_0D/

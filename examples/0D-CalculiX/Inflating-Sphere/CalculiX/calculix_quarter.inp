@@ -1,0 +1,48 @@
+*INCLUDE, INPUT=geom_q.inp
+*INCLUDE, INPUT=x0.nam
+*INCLUDE, INPUT=y0.nam
+*INCLUDE, INPUT=z0.nam
+
+** *AMPLITUDE,NAME=A1
+**  0.,0,1.0,1.0
+
+*BOUNDARY
+ Nx0, 1, 1, 0.0
+ Ny0, 2, 2, 0.0
+ Nz0, 3, 3, 0.0
+
+** units are in mm, so MPa = 1 N/mm^2 = 1e3 N/cm^2 [kPa] = 1e6 N/m^2 [Pa]
+** 3kPa = 0.003 MPa = 0.003 N/mm^2
+*MATERIAL,NAME=RUBBER
+** *HYPERELASTIC, NEO HOOKE
+**  0.003000, 0.00000066
+*ELASTIC
+ 3.000, 0.33
+*DENSITY
+ 1E-3
+** *DAMPING, ALPHA=1.00, BETA=0.00
+
+*SHELL SECTION, MATERIAL=RUBBER, ELSET=SHELL, OFFSET=-0.5
+ 0.0025
+
+*STEP, NLGEOM, INC=100000
+** *DYNAMIC
+**  0.01, 1.0
+*STATIC
+ 1.0, 1.0, 0.1, 0.1
+
+** pressures are also in MPA
+** *DLOAD
+**  SHELL, P1, 0.01
+
+*CLOAD
+ Ninterface, 1, 0.0
+ Ninterface, 2, 0.0
+ Ninterface, 3, 0.0
+
+*NODE FILE,FREQUENCY=1
+ U
+*EL FILE
+ E, ME, S
+
+*END STEP

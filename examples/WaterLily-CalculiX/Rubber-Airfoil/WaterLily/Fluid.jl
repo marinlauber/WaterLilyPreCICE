@@ -4,10 +4,7 @@ using WaterLilyPreCICE,StaticArrays,WriteVTK
 vtk_velocity(a::AbstractSimulation) = a.flow.u |> Array;
 vtk_pressure(a::AbstractSimulation) = a.flow.p |> Array;
 vtk_body(a::AbstractSimulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a.flow)); a.flow.σ |> Array;)
-custom_attrib = Dict("u" => vtk_velocity,
-                     "p" => vtk_pressure, 
-                     "d" => vtk_body
-)
+custom_attrib = Dict("u"=>vtk_velocity, "p"=>vtk_pressure, "d"=>vtk_body)
 
 # make the sim
 L,Re,U = 64,1000,1
@@ -25,7 +22,9 @@ let
         readData!(sim)
 
         # update the this participant and scale forces
-        sim_step!(sim); sim.int.forces ./= sim.L
+        sim_step!(sim); sim.int.forces .*= 2sim.U^2/sim.L
+        sim.int.forces[:,3] .= 0.0 # zero-spanwise forces 
+        # sim.int.forces[:,2] .= min(sim_time(sim)/2,1)*0.02
        
         # write data to the other participant
         writeData!(sim)
