@@ -249,11 +249,11 @@ import WaterLily
 using WriteVTK
 
 # access the WaterLily writer to save the file
-function WaterLily.write!(w,a::MeshBody,t=w.count[1]) #where S<:AbstractSimulation{A,B,C,D,MeshBody}
+function WaterLily.save!(w,a::MeshBody,t=w.count[1]) #where S<:AbstractSimulation{A,B,C,D,MeshBody}
     k = w.count[1]
     points = hcat([[p.data...] for p ∈ a.mesh.position]...)
     cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, Base.to_index.(face)) for face in faces(a.mesh)]
-    vtk = vtk_grid(w.dir_name*@sprintf("/%s_%06i", w.fname, k), points, cells) 
+    vtk = vtk_grid(w.dir_name*@sprintf("/%s_%06i", w.fname, k), points, cells)
     for (name,func) in w.output_attrib
         # point/vector data must be oriented in the same way as the mesh
         vtk[name] = ndims(func(a))==1 ? func(a) : permutedims(func(a))
