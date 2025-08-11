@@ -442,10 +442,10 @@ function get_dist(mesh::M,velocity::M,x::SVector{T};kwargs...) where {M<:Geometr
     return (d,n,zero(x)) #v
 end # 120.029 ns (0 allocations: 0 bytes)d # 4.266 μs (0 allocations: 0 bytes)
 
-@kernel function _distance(mesh, x,@Const()...) where T
-    I = @index(Global)
+# @kernel function _distance(mesh, x,@Const()...) where T
+#     I = @index(Global)
     
-end
+# end
 
 
 """
@@ -464,9 +464,9 @@ function traverse_fsm(x::SVector{3,T},bvh::BVH_simple,velocity::M) where {M<:Geo
         all((box.lo .<= x) .& (x .<= box.up)) || all((box.up .<= x) .& (x .<= box.lo))
     end
 
-   @inline sibling(current::Int) = current%2==0 ? current+1 : current-1  #0 alloc
-   @inline isLeaf(current::Int) = current > n_nodes   # 0 alloc?
-   @inline parent(current::Int)= fld(current,2)  # 0 alloc
+    @inline sibling(current::Int) = current%2==0 ? current+1 : current-1  #0 alloc
+    @inline isLeaf(current::Int) = current > n_nodes   # 0 alloc?
+    @inline parent(current::Int)= fld(current,2)  # 0 alloc
 
     sol=(8.0, zero(x),zero(x))
     state=fromParent
