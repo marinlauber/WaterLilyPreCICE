@@ -50,6 +50,16 @@ end
 # oriented area of a triangle
 @inbounds @inline dS(tri::GeometryBasics.Ngon{3}) = 0.5f0SVector(cross(tri.points[2]-tri.points[1],tri.points[3]-tri.points[1]))
 
+# update the mesh with the new displacements
+function update_mesh(mesh0, deformation)
+    # update the mesh so that any measure on it is correct
+    points = Point3f[]
+    for (i,pnt) in enumerate(mesh0.position)
+        push!(points, Point3f(SA[pnt.data...] .+ deformation[i,:]))
+    end
+    return GeometryBasics.Mesh(points,GeometryBasics.faces(mesh0))
+end
+
 let
 
     # keyword argument might be specified
@@ -88,24 +98,63 @@ let
     solver_dt = 1.0
     time = [0.0]
 
+    # initialise storage
+    mesh_storage = deepcopy(mesh)
+    r0 = √sum(abs2, mesh.position[1] .- 0)
+    volume = [4/3*π*r0^3]
+
+    # iteration storage
+    pressure_iter = []
+    volume_iter = []
+    p₁ = p₀ = 0.
+    iteration = 1.0
+
+    # main time loop
     while PreCICE.isCouplingOngoing()
 
         if PreCICE.requiresWritingCheckpoint()
-            mesh0 = deepcopy(mesh)
+            # save state at sum(time) = t
+            mesh_storage = deepcopy(mesh)
         end
 
         # set time step
         precice_dt = PreCICE.getMaxTimeStepSize()
         dt = min(precice_dt, solver_dt)
-        push!(time, dt)
+        push!(time, dt) # sum(time) = t+Δt (end of this time step)
 
         # read data from other participant
         displacements = PreCICE.readData("Solid-Mesh", "Displacements", ControlPointsID, dt)
-        println(" New radius at t=$(sum(time)): ",√sum(abs2, mesh.position[1].-0.0.+displacements[1,:]))
+        # update the mesh
+        mesh = update_mesh(mesh0, displacements)
+        r = √sum(abs2, mesh.position[1] .- 0)
+        println(" New radius at t=$(sum(time)): ", r)
 
         # linear pressure ramp from 0 to 1
-        p₁ = 0.01*sum(time)
-        println("P₁: ",p₁)
+        # p₁ = 0.01*sum(time)
+
+        # volume of sphere
+        push!(volume, 4/3*π*r^3)
+        push!(volume_iter, 4/3*π*r^3)
+
+        # target volume
+        target_volume = volume[1] + 0.5*sum(time) # target flow rate is 0.5
+        println(" Current volume: ",volume[end]," target volume: ",target_volume)
+
+        Cₕ = 0.025 # relaxation factor for the pressure
+        if iteration < 3
+            p₁ = p₀ = Cₕ*(target_volume - volume[end])
+        else
+            p₁ = p₀ + Cₕ*(target_volume - volume[end])
+            ∂p = pressure_iter[end] - pressure_iter[end-1]
+            ∂v = volume_iter[end] - volume_iter[end-1]
+            println(" ∂p/∂v: ", round(∂p/∂v, digits=6), "   Cₕ: ", round(Cₕ, digits=6))
+            # p₁ = p₀ + (∂p/∂v)*(target_volume - volume[end])
+            p₀ = p₁
+        end
+        push!(pressure_iter, p₁)
+
+        println(" P₁: ", p₁)
+        println(" relative volume residual: ", abs(target_volume - volume[end])/target_volume)
 
         # we then need to recompute the forces with the correct volume and pressure
         forces .= 0 # reset the forces
@@ -114,7 +163,7 @@ let
             forces[map_id[id],:] .+= transpose(f)./3 # add all the contribution from the faces to the nodes
         end
 
-        # write the force at the quad points
+        # write the force at the nodes
         PreCICE.writeData("Solid-Mesh", "Forces", ControlPointsID, forces)
 
         # do the coupling
@@ -122,16 +171,24 @@ let
 
         # read checkpoint if required or move on
         if PreCICE.requiresReadingCheckpoint()
-            mesh = deepcopy(mesh0)
+            iteration += 1
+            # revert to sum(time) = t
+            mesh = deepcopy(mesh_storage)
             pop!(time) # remove last time step since we are going back
         else
-            # move on
-            # t += dt
+            # only update the mesh once per time window
+            # mesh = update_mesh(mesh0, displacements)
+            pressure_iter = [] # reset
+            volume_iter = []
+            iteration = 1
         end
 
         # if we have converged, save if required
         if PreCICE.isTimeWindowComplete()
-           # nothing
+            r = √sum(abs2, mesh.position[1] .- 0)
+            vol = 4/3*π*r^3
+            println(" final relative volume residual: ", abs(target_volume - volume[end])/target_volume)
+            println()
         end
     end
     # save the nodal force at the end of the simulation
