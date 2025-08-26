@@ -102,12 +102,16 @@ let
     mesh_storage = deepcopy(mesh)
     r0 = √sum(abs2, mesh.position[1] .- 0)
     volume = [4/3*π*r0^3]
+    pressure = []
+    Q = []
 
     # iteration storage
     pressure_iter = []
     volume_iter = []
     p₁ = p₀ = 0.
     iteration = 1.0
+    Q_target = 0.5
+    Cₕ = 0.025 # relaxation factor for the pressure
 
     # main time loop
     while PreCICE.isCouplingOngoing()
@@ -133,18 +137,16 @@ let
         # p₁ = 0.01*sum(time)
 
         # volume of sphere
-        push!(volume, 4/3*π*r^3)
         push!(volume_iter, 4/3*π*r^3)
 
         # target volume
-        target_volume = volume[1] + 0.5*sum(time) # target flow rate is 0.5
-        println(" Current volume: ",volume[end]," target volume: ",target_volume)
+        target_volume = volume[1] + Q_target*sum(time) # target flow rate is 0.5
+        println(" Current volume: ",volume_iter[end]," target volume: ",target_volume)
 
-        Cₕ = 0.025 # relaxation factor for the pressure
         if iteration < 3
-            p₁ = p₀ = Cₕ*(target_volume - volume[end])
+            p₁ = p₀ = Cₕ*(target_volume - volume_iter[end])
         else
-            p₁ = p₀ + Cₕ*(target_volume - volume[end])
+            p₁ = p₀ + Cₕ*(target_volume - volume_iter[end])
             ∂p = pressure_iter[end] - pressure_iter[end-1]
             ∂v = volume_iter[end] - volume_iter[end-1]
             println(" ∂p/∂v: ", round(∂p/∂v, digits=6), "   Cₕ: ", round(Cₕ, digits=6))
@@ -181,16 +183,21 @@ let
             pressure_iter = [] # reset
             volume_iter = []
             iteration = 1
+            push!(volume, 4/3*π*r^3)
+            push!(pressure, p₁)
+            push!(Q, (volume[end]-volume[end-1])/dt)
         end
 
         # if we have converged, save if required
         if PreCICE.isTimeWindowComplete()
-            r = √sum(abs2, mesh.position[1] .- 0)
-            vol = 4/3*π*r^3
+            vol = 4/3*π*(√sum(abs2, mesh.position[1] .- 0))^3
             println(" final relative volume residual: ", abs(target_volume - volume[end])/target_volume)
             println()
         end
     end
+    @show volume
+    @show pressure
+    @show Q
     # save the nodal force at the end of the simulation
     # open("../Solid/cload.nam", "w") do io
     #     for i in 1:size(forces,1), j in 1:3
