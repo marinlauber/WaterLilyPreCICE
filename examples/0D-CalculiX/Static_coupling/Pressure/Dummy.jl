@@ -1,6 +1,6 @@
 using GeometryBasics,WriteVTK,StaticArrays,PreCICE
+using Printf,CSV,DataFrames
 using LinearAlgebra: cross
-using Printf
 
 function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
     #INP file format
@@ -60,6 +60,9 @@ function update_mesh(mesh0, deformation)
     return GeometryBasics.Mesh(points,GeometryBasics.faces(mesh0))
 end
 
+# compute the volume of the mesh, assumes the sphere is centered at 0 and is uniformly deformed
+@inline get_volume(mesh) =4/3*π*(√sum(abs2, mesh.position[1] .- 0))^3
+
 let
 
     # keyword argument might be specified
@@ -100,18 +103,15 @@ let
 
     # initialise storage
     mesh_storage = deepcopy(mesh)
-    r0 = √sum(abs2, mesh.position[1] .- 0)
-    volume = [4/3*π*r0^3]
-    pressure = []
-    Q = []
+    vol0 = get_volume(mesh)
 
     # iteration storage
-    pressure_iter = []
-    volume_iter = []
+    storage_step,pressure_iter,volume_iter = [],[],[]
     p₁ = p₀ = 0.
-    iteration = 1.0
+    iteration = step = 1
     Q_target = 0.5
     Cₕ = 0.025 # relaxation factor for the pressure
+    simple = true # use a simple fixed-point or a secant method
 
     # main time loop
     while PreCICE.isCouplingOngoing()
@@ -130,33 +130,24 @@ let
         displacements = PreCICE.readData("Solid-Mesh", "Displacements", ControlPointsID, dt)
         # update the mesh
         mesh = update_mesh(mesh0, displacements)
-        r = √sum(abs2, mesh.position[1] .- 0)
-        println(" New radius at t=$(sum(time)): ", r)
-
-        # linear pressure ramp from 0 to 1
-        # p₁ = 0.01*sum(time)
+        vol = get_volume(mesh)
 
         # volume of sphere
-        push!(volume_iter, 4/3*π*r^3)
+        push!(volume_iter, vol)
 
         # target volume
-        target_volume = volume[1] + Q_target*sum(time) # target flow rate is 0.5
-        println(" Current volume: ",volume_iter[end]," target volume: ",target_volume)
+        target_volume = vol0 + Q_target*sum(time) # target flow rate is 0.5
 
-        if iteration < 3
-            p₁ = p₀ = Cₕ*(target_volume - volume_iter[end])
-        else
+        # fixed-point for the pressure
+        if simple==true
             p₁ = p₀ + Cₕ*(target_volume - volume_iter[end])
+        else
             ∂p = pressure_iter[end] - pressure_iter[end-1]
             ∂v = volume_iter[end] - volume_iter[end-1]
-            println(" ∂p/∂v: ", round(∂p/∂v, digits=6), "   Cₕ: ", round(Cₕ, digits=6))
-            # p₁ = p₀ + (∂p/∂v)*(target_volume - volume[end])
-            p₀ = p₁
+            p₁ = p₀ + (∂p/∂v)*(target_volume - volume[end])
         end
+        p₀ = p₁
         push!(pressure_iter, p₁)
-
-        println(" P₁: ", p₁)
-        println(" relative volume residual: ", abs(target_volume - volume[end])/target_volume)
 
         # we then need to recompute the forces with the correct volume and pressure
         forces .= 0 # reset the forces
@@ -171,33 +162,28 @@ let
         # do the coupling
         PreCICE.advance(dt) # advance to t+Δt
 
+        # save the data
+        push!(storage_step, [step, iteration, sum(time), p₁, vol, target_volume])
+
         # read checkpoint if required or move on
         if PreCICE.requiresReadingCheckpoint()
-            iteration += 1
             # revert to sum(time) = t
             mesh = deepcopy(mesh_storage)
             pop!(time) # remove last time step since we are going back
+            iteration += 1
         else
-            # only update the mesh once per time window
-            # mesh = update_mesh(mesh0, displacements)
-            pressure_iter = [] # reset
-            volume_iter = []
+            # we can move on, reset counter and increment step
             iteration = 1
-            push!(volume, 4/3*π*r^3)
-            push!(pressure, p₁)
-            push!(Q, (volume[end]-volume[end-1])/dt)
+            step += 1
         end
 
         # if we have converged, save if required
         if PreCICE.isTimeWindowComplete()
-            vol = 4/3*π*(√sum(abs2, mesh.position[1] .- 0))^3
-            println(" final relative volume residual: ", abs(target_volume - volume[end])/target_volume)
-            println()
+            out_data = reduce(vcat,storage_step')
+            CSV.write("sphere_output.csv", DataFrame(out_data,:auto),
+                        header=["timestep","iter","time","pressure","volume","target_volume"])
         end
     end
-    @show volume
-    @show pressure
-    @show Q
     # save the nodal force at the end of the simulation
     # open("../Solid/cload.nam", "w") do io
     #     for i in 1:size(forces,1), j in 1:3
