@@ -2,4 +2,4 @@
 set -e -u
 
 # run the case
-julia --project=../../../ Dummy.jl ../precice-config.xml
+julia --project=../../../ Windkessel.jl ../precice-config.xml
