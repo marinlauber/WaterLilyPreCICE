@@ -2,66 +2,9 @@ using GeometryBasics,WriteVTK,StaticArrays,PreCICE
 using Printf,CSV,DataFrames
 using LinearAlgebra: cross
 
-function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
-    #INP file format
-    @assert endswith(fname,".inp") "file type not supported"
-    fs = open(fname)
-
-    points = pointtype[]
-    faces = facetype[]
-    node_idx = Int[]
-    srf_id = Tuple[]
-    cnt = 0
-
-    # read the first 3 lines if there is the "*heading" keyword
-    line = readline(fs)
-    contains(line,"*heading") && (line = readline(fs))
-    BlockType = contains(line,"*NODE") ? Val{:NodeBlock}() : Val{:DataBlock}()
-
-    # read the file
-    while !eof(fs)
-        line = readline(fs)
-        contains(line,"*ELSET, ELSET=") && (cnt+=1)
-        BlockType, line = parse_blocktype!(BlockType, fs, line)
-        if BlockType == Val{:NodeBlock}()
-            push!(node_idx, parse(Int,split(line,",")[1])) # keep track of the node index of the inp file
-            push!(points, pointtype(parse.(eltype(pointtype),split(line,",")[2:4])))
-        elseif BlockType == Val{:ElementBlock}()
-            nodes = parse.(Int,split(line,",")[2:end])
-            push!(faces, TriangleFace{Int}(facetype([findfirst(==(node),node_idx) for node in nodes])...)) # parse the face
-        elseif BlockType == Val{:ElSetBlock}()
-            push!(srf_id, (cnt, parse.(Int,split(line,",")[1])));
-        else
-            continue
-        end
-    end
-    close(fs) # close file stream
-    # case where there is no surface ID and we pass it a single tuple of all the faces
-    srf_id = length(srf_id)==0 ? ntuple(i->(1,i),length(faces)) : ntuple(i->(srf_id[i].+(0,1-srf_id[1][2])),length(srf_id))
-    return Mesh(points, faces), srf_id
-end
-function parse_blocktype!(block, io, line)
-    contains(line,"*NODE") && return block=Val{:NodeBlock}(),readline(io)
-    contains(line,"*ELEMENT") && return block=Val{:ElementBlock}(),readline(io)
-    contains(line,"*ELSET, ELSET=") && return block=Val{:ElSetBlock}(),readline(io)
-    return block, line
-end
-
-# oriented area of a triangle
-@inbounds @inline dS(tri::GeometryBasics.Ngon{3}) = 0.5f0SVector(cross(tri.points[2]-tri.points[1],tri.points[3]-tri.points[1]))
-
-# update the mesh with the new displacements
-function update_mesh(mesh0, deformation)
-    # update the mesh so that any measure on it is correct
-    points = Point3f[]
-    for (i,pnt) in enumerate(mesh0.position)
-        push!(points, Point3f(SA[pnt.data...] .+ deformation[i,:]))
-    end
-    return GeometryBasics.Mesh(points,GeometryBasics.faces(mesh0))
-end
-
-# compute the volume of the mesh, assumes the sphere is centered at 0 and is uniformly deformed
-@inline get_volume(mesh) =4/3*π*(√sum(abs2, mesh.position[1] .- 0))^3
+# reading inp files
+include("IO.jl")
+include("utils.jl")
 
 let
 
@@ -72,45 +15,22 @@ let
         configFileName = ARGS[1]
     end
 
-    # load the mesh
-    mesh0,srf_id = load_inp("../Solid/geom.inp")
-
-    # create coupling
-    PreCICE.createParticipant("LPM", configFileName, 0, 1)
-
-    # initialise PreCICE
-    PreCICE.initialize()
-
-    # we need to initialize before we can get the mesh points and coordinates
-    (ControlPointsID, ControlPoints) = PreCICE.getMeshVertexIDsAndCoordinates("Solid-Mesh")
-    ControlPointsID = Array{Int32}(ControlPointsID)
-    vertices = Array{Float64,2}(transpose(reshape(ControlPoints,reverse(size(ControlPoints)))))
-    verts = GeometryBasics.Point3f[]
-    for i in 1:size(vertices,1)
-        push!(verts, GeometryBasics.Point3f(vertices[i,:]))
-    end
-    mesh = GeometryBasics.Mesh(verts,GeometryBasics.faces(mesh0))
-
-    # mapping from center to nodes, needed for the forces
-    forces = zeros(Float64, size(ControlPoints))
-
-    # map triangle to nodes, needed for the forces
-    map_id = map(((i,F),)->vcat(Base.to_index.(F).data...),enumerate(faces(mesh)))
+    # initialized precice and return mesh, mapping and forces
+    mesh0, map_id, srf_id, forces, ControlPointsID = generate(configFileName)
 
     # solver setting
     solver_dt = 1.0
     time = [0.0]
 
     # initialise storage
-    mesh_storage = deepcopy(mesh)
-    vol0 = get_volume(mesh)
+    vol0 = 100*get_volume(mesh0)
 
     # iteration storage
     storage_step,pressure_iter,volume_iter = [],[],[]
-    p₁ = p₀ = 0.
+    PLV₁ = PLV₀ = 0.
     iteration = step = 1
-    Q_target = 0.5
-    Cₕ = 0.02 # relaxation factor for the pressure
+    Q_target = 60.0
+    Cₕ = 0.64 # relaxation factor for the pressure
     simple = true # use a simple fixed-point or a secant method
 
     # main time loop
@@ -118,7 +38,6 @@ let
 
         if PreCICE.requiresWritingCheckpoint()
             # save state at sum(time) = t
-            mesh_storage = deepcopy(mesh)
         end
 
         # set time step
@@ -130,7 +49,7 @@ let
         displacements = PreCICE.readData("Solid-Mesh", "Displacements", ControlPointsID, dt)
         # update the mesh
         mesh = update_mesh(mesh0, displacements)
-        vol = get_volume(mesh)
+        vol = 100*get_volume(mesh)
 
         # volume of sphere
         push!(volume_iter, vol)
@@ -140,21 +59,17 @@ let
 
         # fixed-point for the pressure
         if simple==true
-            p₁ = p₀ + Cₕ*(target_volume - volume_iter[end])
+            PLV₁ = PLV₀ + Cₕ*(target_volume - volume_iter[end])
         else
             ∂p = pressure_iter[end] - pressure_iter[end-1]
             ∂v = volume_iter[end] - volume_iter[end-1]
-            p₁ = p₀ + (∂p/∂v)*(target_volume - volume[end])
+            PLV₁ = PLV₀ + (∂p/∂v)*(target_volume - volume[end])
         end
-        p₀ = p₁
-        push!(pressure_iter, p₁)
+        PLV₀ = PLV₁
+        push!(pressure_iter, PLV₁)
 
         # we then need to recompute the forces with the correct volume and pressure
-        forces .= 0 # reset the forces
-        for (i,id) in srf_id
-            f = dS(@views(mesh[id])) .* p₁ # pressure is 0.01, regardless of the time
-            forces[map_id[id],:] .+= transpose(f)./3 # add all the contribution from the faces to the nodes
-        end
+        compute_forces!(forces, PLV₁, mesh, srf_id, map_id)
 
         # write the force at the nodes
         PreCICE.writeData("Solid-Mesh", "Forces", ControlPointsID, forces)
@@ -163,12 +78,12 @@ let
         PreCICE.advance(dt) # advance to t+Δt
 
         # save the data
-        push!(storage_step, [step, iteration, sum(time), p₁, vol, target_volume])
+        push!(storage_step, [step, iteration, sum(time), PLV₁, 0.0, vol,
+                             0., 0., 0., 0., 0.])
 
         # read checkpoint if required or move on
         if PreCICE.requiresReadingCheckpoint()
             # revert to sum(time) = t
-            mesh = deepcopy(mesh_storage)
             pop!(time) # remove last time step since we are going back
             iteration += 1
         else
@@ -181,7 +96,8 @@ let
         if PreCICE.isTimeWindowComplete()
             out_data = reduce(vcat,storage_step')
             CSV.write("sphere_output.csv", DataFrame(out_data,:auto),
-                      header=["timestep","iter","time","pressure","volume","target_volume"])
+                      header=["timestep","iter","time","PLV_3D", "PACT_3D", "VLV_3D",
+                              "VLV_0D", "PAO_0D","QAO_0D", "QMV_0D", "PLV_0D"])
         end
     end
     # save the nodal force at the end of the simulation
