@@ -23,13 +23,17 @@ xp = collect(1:maximum(data.iter))
 time = data_conv.time
 deltat = time[2]-time[1]
 tmax = maximum(time)
-p6 = plot(time, data_conv.VLV_0D, label="VLV 0D", alpha=0.5, c=:orange, xlims=(0,tmax))
-plot!(p6, time, data_conv.PAO_0D, label="PAO 0D", alpha=0.5, c=:blue)
+p2 = plot(time, data_conv.VLV_0D, label="VLV 0D", alpha=0.5, c=:orange, xlims=(0,tmax))
+plot!(p2, time, data_conv.PAO_0D, label="PAO 0D", alpha=0.5, c=:blue)
 
 p1 = plot(time, data_conv.PLV_3D, c=:red, label="PLV 3D", ylabel="Pressure (mmHg)", alpha=0.5, xlims=(0,tmax), ylims=(0,120))
 plot!(p1, time, data_conv.PAO_0D, label="PAO 0D", alpha=0.5, c=:blue)
-p2 = plot(time, data_conv.VLV_3D, c=:black, label=:none, ylabel="Volume (ml)", alpha=0.5, xlims=(0,tmax))
+plot(p2, time, data_conv.VLV_3D, c=:black, label=:none, ylabel="Volume (ml)", alpha=0.5, xlims=(0,tmax))
 plot!(p1, time, data_conv.PLV_0D, label="PLV 0D", c=:green)
+plot!(p1, time, data_conv.Pfill_0D, label="Pfill 0D", c=:cyan)
+
+p6 = plot(data_conv.VLV_3D, data_conv.PLV_3D, label="3D", ylabel="PLV (mmHg)", xlabel="VLV (ml)", xlims=(0,160), ylims=(0,100))
+plot!(p6, data_conv.VLV_0D, data_conv.PLV_0D, label="0D", c=:orange)
 
 # flow rates
 p5 = plot(time, -data_conv.QAO_0D./12, label="QAO 0D",
@@ -53,10 +57,10 @@ for i in 1:maximum(Int,data.timestep)
     last_v = maximum([findall(data.timestep.≈i-1)...,1])
     plot!(p5, xs, data.VLV_3D[idx_ts] .- data.VLV_3D[last_v], label=:none, c=:blue, lw=2)
     # 0D model ouptu
-    plot!(p6, xs, data.VLV_0D[idx_ts], label=:none, c=:orange, lw=2)
-    plot!(p6, xs, data.PAO_0D[idx_ts], label=:none, c=:blue, lw=2)
+    plot!(p2, xs, data.VLV_0D[idx_ts], label=:none, c=:orange, lw=2)
+    plot!(p2, xs, data.PAO_0D[idx_ts], label=:none, c=:blue, lw=2)
 end
 
 # make the combined plot
 plot(p1, p2, p3, p4, p5, p6, layout=(2,3), size=(1200,600), dpi=300)
-# savefig("curve_actuation.png")
+savefig("curve_3D-0D.png")
