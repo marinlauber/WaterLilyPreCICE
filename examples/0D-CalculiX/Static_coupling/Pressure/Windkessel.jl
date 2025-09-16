@@ -8,23 +8,15 @@ include("IO.jl")
 include("utils.jl")
 
 # Double Hill function inspired by Stergiopulos et al. (DOI:10.1152/ajpheart.1996.270.6.H2050)
-function Elastance(t;Emin=0.05,Emax=2,a₁=0.303,a₂=0.508,n₁=1.32,n₂=21.9,α=1.672)
+function Elastance(t;Emin=0.0,Emax=1.0,a₁=0.303,a₂=0.508,n₁=1.32,n₂=21.9,α=1.672)
     (Emax-Emin) * α * (t%1/a₁)^n₁ / (1+(t%1/a₁)^n₁) * inv(1+(t%1/(a₂))^n₂)  + Emin
-end # amplitude is 2
-# times = collect(0:0.05:1) .+ 0.65
-# plot(times, Elastance.(times), xlabel="time (s)", ylabel="Elastance (mmHg/ml)", label="E(t)")
-
-# pressure volume loop function
-@inline computePLV(t,V;Emin=0.05,Emax=2,V0=20) = Elastance(t;Emin,Emax) * (V-V0)
+end
 
 # open-loop windkessel
 function Windkessel!(du,u,p,t)
     # unpack
     (VLV, Pao, PLV) = u
     (Pfill,Rmv_fwd,Rmv_bwd,Rao_fwd,Rao_bwd,R,C)  = p
-
-    # first calculate PLV from elastance and VLV
-    # PLV = computePLV(t,VLV)
 
     # calculate Qmv, Pfilling>PLV; forward transmitral flow, PLV>Pfilling - backward transmitral flow
     Qmv = Pfill ≥ PLV ? (Pfill-PLV)/Rmv_fwd : (PLV-Pfill)/Rmv_bwd
@@ -56,23 +48,19 @@ let
     time = [0.0]
 
     # initialise storage
-    vol0 = 100*get_volume(mesh0) # convert to ml
+    scale_vol = 80.0
+    vol0 = scale_vol*get_volume(mesh0) # convert to ml
 
     # iteration storage
-    storage_step,pressure_iter,volume_iter = [],[],[]
+    storage_step = []
     iteration = step = 1
-    Q_target = 20.0  # ml/s between t=0 and t=1
-    Cₕ = 0.64    # relaxation factor for the pressure
-    simple = true    # use a simple fixed-point or a secant method
+    Cₕ = 0.256    # relaxation factor for the pressure
+    mmHg2Pa = 133.322387415
 
     # set model parameters
     # Cardiac parameters
-    Emax = 2                    #mmHg/ml; slope of the ESPVR
-    V0 = 20                     #ml; intercept with volume axis of the ESPVR
-    Pfilling = 5                #mmHg; venous filling pressure
+    Pfilling = 6.0              #mmHg; @TODO to reach EDV 120ml with sphere
     EDV = 120                   #ml; end-diastolic volume. We will use EDV with Pvenous to calculate Emin
-    Emin = Pfilling/(EDV-V0)    #mmHg/ml
-    HR = 60                     #heart rate in beats/min
 
     # Valve resistances
     Rmv_fwd = 0.002             #mmHg/ml/s; resistance in forward flow direction
@@ -85,8 +73,8 @@ let
     C_WK2 = 2                   #ml/mmHg
 
     #Setup
-    PLV₁ = PLV₀ = Pfilling
-    u₀ = [EDV, 40, PLV₁] # initial conditions
+    PLV₁ = PLV₀ = 1.0
+    u₀ = [EDV, 60, Pfilling] # initial conditions
     tspan = (0.0, 10.0)
     params = [Pfilling, Rmv_fwd, Rmv_bwd, Rao_fwd, Rao_bwd, R_WK2, C_WK2]
 
@@ -94,9 +82,7 @@ let
     prob = ODEProblem(Windkessel!, u₀, tspan, params)
 
     # full control over iterations
-    integrator = init(prob, Tsit5(), dtmax=0.001, reltol=1e-6, abstol=1e-9,
-                      save_everystep=false)
-    t_sol = []
+    integrator = init(prob, Tsit5(), dtmax=0.001, reltol=1e-6, abstol=1e-9, save_everystep=false)
     # initial storage
     ut_store = [integrator.t, integrator.u...]
 
@@ -108,6 +94,9 @@ let
             ut_store = [integrator.t, integrator.u...]
         end
 
+        # pressure at this step, meaning sum(time) = t
+        Pact = 68*Elastance(sum(time))
+
         # set time step
         precice_dt = PreCICE.getMaxTimeStepSize()
         dt = min(precice_dt, solver_dt)
@@ -115,52 +104,26 @@ let
 
         # read data from other participant
         displacements = PreCICE.readData("Solid-Mesh", "Displacements", ControlPointsID, dt)
-        # update the mesh
         mesh = update_mesh(mesh0, displacements)
-        vol = 100*get_volume(mesh) # scale to ml
+        vol = scale_vol*get_volume(mesh) # scale to ml
 
-        # volume of sphere
-        push!(volume_iter, vol)
-
-        # solve the ODE to get VLV and Pao at t+Δt
+        # solve the ODE to get VLV and Pao at t+Δt, fill the initial condition with current state
+        SciMLBase.set_ut!(integrator, [ut_store[2], ut_store[3], PLV₁+Pact], ut_store[1])
         OrdinaryDiffEq.step!(integrator, dt, true) # stop exactly at t+Δt
-        push!(t_sol, [integrator.t, integrator.u[1:2]...])
 
-        # target volume
-        target_volume = vol0 + Q_target*sum(time) # target flow rate is Q_target
-        # target_volume = integrator.u[1] # volume from 0D
-
-        # just to keep track of the values
-        # PLV = computePLV(sum(time),target_volume)
-        Pao = integrator.u[2]
-        PLV = integrator.u[3]
-        Qmv = Pfilling ≥ PLV ? (Pfilling-PLV)/Rmv_fwd : (PLV-Pfilling)/Rmv_bwd
-        Qao = PLV ≥ Pao ? (PLV-Pao)/Rao_fwd : (Pao-PLV)/Rao_bwd
+        # the first time-step is used to reach the EDPVR of 120ml@18mmHg
+        if step==1
+            VLV_0D = vol # volume target
+        else
+            VLV_0D = integrator.u[1] # volume from 0D
+        end
 
         # fixed-point for the pressure
-        if simple==true
-            PLV₁ = PLV₀ + Cₕ*(target_volume - volume_iter[end])
-        else
-            ∂p = pressure_iter[end] - pressure_iter[end-1]
-            ∂v = volume_iter[end] - volume_iter[end-1]
-            PLV₁ = PLV₀ + (∂p/∂v)*(target_volume - volume[end])
-        end
-        PLV₀ = PLV₁
+        PLV₁ = PLV₀ + Cₕ*(VLV_0D - vol)
+        PLV₀ = PLV₁ # for next iteration or next time step
 
-        # actuation pressure at this time
-        #@TODO check the time scaling
-        Pact = 0*Elastance(sum(time); Emin=Emin, Emax=Emax)
-        push!(pressure_iter, PLV₁-Pact)
-        if PLV₁ < Pact
-            @warn "The pressure in the ventricle must be higher than the actuation pressure"
-        end
-        
         # we then need to recompute the forces with the correct volume and pressure
-        forces .= 0 # reset the forces
-        for (i,id) in srf_id
-            f = dS(@views(mesh[id])) .* max(0,(PLV₁-Pact)) # pressure jump
-            forces[map_id[id],:] .+= transpose(f)./3 # add all the contribution from the faces to the nodes
-        end
+        compute_forces!(forces, mmHg2Pa*PLV₁, mesh, srf_id, map_id)
 
         # write the force at the nodes
         PreCICE.writeData("Solid-Mesh", "Forces", ControlPointsID, forces)
@@ -168,16 +131,17 @@ let
         # do the coupling
         PreCICE.advance(dt) # advance to t+Δt
 
+        # just to keep track of the values
+        Pao,PLV = integrator.u[2:3]
+        Qmv = Pfilling ≥ PLV ? (Pfilling-PLV)/Rmv_fwd : (PLV-Pfilling)/Rmv_bwd
+        Qao = PLV ≥ Pao ? (PLV-Pao)/Rao_fwd : (Pao-PLV)/Rao_bwd
         # save the data
-        push!(storage_step, [step, iteration, sum(time), PLV₁, Pact, vol,
-                             integrator.u[1:2]..., Qao, Qmv, PLV])
+        push!(storage_step, [step, iteration, sum(time), PLV₁+Pact, Pact, vol,
+                             VLV_0D, integrator.u[2], Qao, Qmv, PLV])
 
         # read checkpoint if required or move on
-        if PreCICE.requiresReadingCheckpoint()
-            # revert to sum(time) = t
+        if PreCICE.requiresReadingCheckpoint() # revert to sum(time) = t
             pop!(time) # remove last time step since we are going back
-            # revert integrator, put the correct pressure there
-            SciMLBase.set_ut!(integrator, [ut_store[2], ut_store[3], PLV₁], ut_store[1])
             iteration += 1
         else
             # we can move on, reset counter and increment step

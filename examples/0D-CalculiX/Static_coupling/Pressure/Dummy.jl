@@ -23,15 +23,19 @@ let
     time = [0.0]
 
     # initialise storage
-    vol0 = 100*get_volume(mesh0)
+    scale_vol = 80
+    vol0 = scale_vol*get_volume(mesh0)
 
     # iteration storage
-    storage_step,pressure_iter,volume_iter = [],[],[]
-    PLV₁ = PLV₀ = 0.
+    storage_step = []
+    PLV₁ = PLV₀ = 1.0 # must be nonzero
+    Pact = 0.0
     iteration = step = 1
-    Q_target = 60.0
-    Cₕ = 0.64 # relaxation factor for the pressure
+    EDV = 120.0
+    Cₕ = 0.1 # relaxation factor for the pressure
     simple = true # use a simple fixed-point or a secant method
+    mmHg2Pa = 133.322387415
+    ACTUATE = false # do we provide an external pressure?
 
     # main time loop
     while PreCICE.isCouplingOngoing()
@@ -49,27 +53,21 @@ let
         displacements = PreCICE.readData("Solid-Mesh", "Displacements", ControlPointsID, dt)
         # update the mesh
         mesh = update_mesh(mesh0, displacements)
-        vol = 100*get_volume(mesh)
-
-        # volume of sphere
-        push!(volume_iter, vol)
+        vol = scale_vol*get_volume(mesh)
 
         # target volume
-        target_volume = vol0 + Q_target*sum(time) # target flow rate is 0.5
+        VLV_0D = vol0 + sum(time)*(EDV-vol0) # target EDV is 120ml
+
+        # the actuation pressure at the aortic pressure must match the EDV of 120ml
+        # ACTUATE && (Pact = sum(time)*(80.0-8.0097))
 
         # fixed-point for the pressure
-        if simple==true
-            PLV₁ = PLV₀ + Cₕ*(target_volume - volume_iter[end])
-        else
-            ∂p = pressure_iter[end] - pressure_iter[end-1]
-            ∂v = volume_iter[end] - volume_iter[end-1]
-            PLV₁ = PLV₀ + (∂p/∂v)*(target_volume - volume[end])
-        end
+        # (Pact > PLV₀) && (PLV₀ += (Pact-PLV₀)) # ensure PLV₀ > Pact
+        PLV₁ = PLV₀ + Cₕ*(VLV_0D - vol)
         PLV₀ = PLV₁
-        push!(pressure_iter, PLV₁)
 
         # we then need to recompute the forces with the correct volume and pressure
-        compute_forces!(forces, PLV₁, mesh, srf_id, map_id)
+        compute_forces!(forces, mmHg2Pa*(PLV₁-Pact), mesh, srf_id, map_id)
 
         # write the force at the nodes
         PreCICE.writeData("Solid-Mesh", "Forces", ControlPointsID, forces)
@@ -78,8 +76,8 @@ let
         PreCICE.advance(dt) # advance to t+Δt
 
         # save the data
-        push!(storage_step, [step, iteration, sum(time), PLV₁, 0.0, vol,
-                             0., 0., 0., 0., 0.])
+        push!(storage_step, [step, iteration, sum(time), PLV₁, Pact, vol,
+                             VLV_0D, 0., 0., 0., 0.])
 
         # read checkpoint if required or move on
         if PreCICE.requiresReadingCheckpoint()
