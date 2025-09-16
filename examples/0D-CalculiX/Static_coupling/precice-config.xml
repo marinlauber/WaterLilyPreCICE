@@ -43,12 +43,12 @@
 
   <coupling-scheme:serial-implicit>
     <participants first="Calculix" second="LPM"/>
-    <max-time value="3.0" />
-    <time-window-size value="0.1" />
+    <max-time value="1.5" />
+    <time-window-size value="0.001" />
     <max-iterations value="20"/>
     <!-- <min-iterations value="10"/> -->
     <exchange data="Displacements" mesh="Solid-Mesh" from="Calculix" to="LPM" initialize="false"/>
     <exchange data="Forces" mesh="Solid-Mesh" from="LPM" to="Calculix" initialize="false"/>
-    <relative-convergence-measure limit="2e-5" data="Forces" mesh="Solid-Mesh"/>
+    <relative-convergence-measure limit="1e-4" data="Forces" mesh="Solid-Mesh"/>
   </coupling-scheme:serial-implicit>
 </precice-configuration>
