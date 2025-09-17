@@ -48,8 +48,10 @@ let
     time = [0.0]
 
     # initialise storage
-    scale_vol = 80.0
+    scale_vol = 90.0
     vol0 = scale_vol*get_volume(mesh0) # convert to ml
+    # print zero pressure volume
+    @printf("Initial volume: %.2f ml\n", vol0)
 
     # iteration storage
     storage_step = []
@@ -65,7 +67,7 @@ let
     # Valve resistances
     Rmv_fwd = 0.002             #mmHg/ml/s; resistance in forward flow direction
     Rmv_bwd = 1e10              #mmHg/ml/s; leak resistance
-    Rao_fwd = 0.002             #mmHg/ml/s; resistance in forward flow direction
+    Rao_fwd = 0.02             #mmHg/ml/s; resistance in forward flow direction
     Rao_bwd = 1e10              #mmHg/ml/s; leak resistance
 
     # Arterial model parameters
@@ -112,17 +114,15 @@ let
         OrdinaryDiffEq.step!(integrator, dt, true) # stop exactly at t+Δt
 
         # the first time-step is used to reach the EDPVR of 120ml@18mmHg
-        if step==1
-            VLV_0D = vol # volume target
-        else
-            VLV_0D = integrator.u[1] # volume from 0D
-        end
+        VLV_0D = integrator.u[1] # volume from 0D
 
         # fixed-point for the pressure
-        PLV₁ = PLV₀ + Cₕ*(VLV_0D - vol)
+        PLV₁ = max(PLV₀ + Cₕ*(VLV_0D - vol), 0.05)
+        step==1 && (PLV₁ = 16.0) # first time step
         PLV₀ = PLV₁ # for next iteration or next time step
 
         # we then need to recompute the forces with the correct volume and pressure
+        @show mmHg2Pa*PLV₁
         compute_forces!(forces, mmHg2Pa*PLV₁, mesh, srf_id, map_id)
 
         # write the force at the nodes
@@ -139,6 +139,11 @@ let
         push!(storage_step, [step, iteration, sum(time), PLV₁+Pact, Pact, vol,
                              VLV_0D, integrator.u[2], Qao, Qmv, PLV, Pfilling])
 
+        out_data = reduce(vcat,storage_step')
+        CSV.write("sphere_output.csv", DataFrame(out_data,:auto),
+                    header=["timestep","iter","time","PLV_3D", "PACT_3D", "VLV_3D",
+                            "VLV_0D", "PAO_0D","QAO_0D", "QMV_0D", "PLV_0D","Pfill_0D"])
+
         # read checkpoint if required or move on
         if PreCICE.requiresReadingCheckpoint() # revert to sum(time) = t
             pop!(time) # remove last time step since we are going back
@@ -151,10 +156,10 @@ let
 
         # if we have converged, save if required
         if PreCICE.isTimeWindowComplete()
-            out_data = reduce(vcat,storage_step')
-            CSV.write("sphere_output.csv", DataFrame(out_data,:auto),
-                      header=["timestep","iter","time","PLV_3D", "PACT_3D", "VLV_3D",
-                              "VLV_0D", "PAO_0D","QAO_0D", "QMV_0D", "PLV_0D","Pfill_0D"])
+            # out_data = reduce(vcat,storage_step')
+            # CSV.write("sphere_output.csv", DataFrame(out_data,:auto),
+            #           header=["timestep","iter","time","PLV_3D", "PACT_3D", "VLV_3D",
+            #                   "VLV_0D", "PAO_0D","QAO_0D", "QMV_0D", "PLV_0D","Pfill_0D"])
         end
     end
     PreCICE.finalize()

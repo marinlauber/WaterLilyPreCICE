@@ -43,7 +43,7 @@
 
   <coupling-scheme:serial-implicit>
     <participants first="Calculix" second="LPM"/>
-    <max-time value="1.5" />
+    <max-time value="5.0" />
     <time-window-size value="0.001" />
     <max-iterations value="20"/>
     <!-- <min-iterations value="10"/> -->

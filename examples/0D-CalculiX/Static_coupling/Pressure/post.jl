@@ -26,11 +26,12 @@ tmax = maximum(time)
 p2 = plot(time, data_conv.VLV_0D, label="VLV 0D", alpha=0.5, c=:orange, xlims=(0,tmax))
 plot!(p2, time, data_conv.PAO_0D, label="PAO 0D", alpha=0.5, c=:blue)
 
-p1 = plot(time, data_conv.PLV_3D, c=:red, label="PLV 3D", ylabel="Pressure (mmHg)", alpha=0.5, xlims=(0,tmax), ylims=(0,120))
+p1 = plot(time, data_conv.Pfill_0D, label="Pfill 0D", c=:cyan)
+plot!(p1, time, data_conv.PACT_3D, label="Pact 3D", c=:magenta)
+plot!(p1, time, data_conv.PLV_0D, label="PLV 0D", c=:green)
+plot!(p1, time, data_conv.PLV_3D, c=:red, label="PLV 3D", ylabel="Pressure (mmHg)", alpha=0.5, xlims=(0,tmax), ylims=(0,120))
 plot!(p1, time, data_conv.PAO_0D, label="PAO 0D", alpha=0.5, c=:blue)
 plot(p2, time, data_conv.VLV_3D, c=:black, label=:none, ylabel="Volume (ml)", alpha=0.5, xlims=(0,tmax))
-plot!(p1, time, data_conv.PLV_0D, label="PLV 0D", c=:green)
-plot!(p1, time, data_conv.Pfill_0D, label="Pfill 0D", c=:cyan)
 
 p6 = plot(data_conv.VLV_3D, data_conv.PLV_3D, label="3D", ylabel="PLV (mmHg)", xlabel="VLV (ml)", xlims=(0,160), ylims=(0,100))
 plot!(p6, data_conv.VLV_0D, data_conv.PLV_0D, label="0D", c=:orange)
@@ -63,4 +64,4 @@ end
 
 # make the combined plot
 plot(p1, p2, p3, p4, p5, p6, layout=(2,3), size=(1200,600), dpi=300)
-savefig("curve_3D-0D.png")
+# savefig("curve_3D-0D.png")
