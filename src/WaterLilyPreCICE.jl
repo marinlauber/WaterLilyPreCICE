@@ -104,7 +104,7 @@ end
 import WaterLily: sim_step!
 function sim_step!(sim::CoupledSimulation; kwargs...)
     # update the this participant this is type-specialized
-    update!(sim.int, sim; kwargs...)
+    update!(sim.body, sim.int; kwargs...)
     # measure and momentum step
     measure!(sim); mom_step!(sim.flow, sim.pois)
     # get forces, this is type-specialized
@@ -116,7 +116,7 @@ macro notimplemented(message="not implemented")
         error($esc(message))
     end
 end
-function update!(::AbstractInterface, args...; kwargs...)
+function update!(body, ::AbstractInterface; kwargs...)
     @notimplemented "`update!` not implemented for `AbstractInterface`, it must to be (interface) specialized"
 end
 function get_forces!(::AbstractInterface, args...; kwargs...)

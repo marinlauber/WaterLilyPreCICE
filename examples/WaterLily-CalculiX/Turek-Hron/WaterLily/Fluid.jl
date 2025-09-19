@@ -43,6 +43,8 @@ while PreCICE.isCouplingOngoing()
 
     # update the this participant and scale forces
     sim_step!(sim)
+    sim.int.forces .=  0
+    k=1 && (sim.int.forces[:,2] .= 2*(sim.U^2/sim.L)*sin(2π/5*WaterLily.time(sim.flow)/sim.L))
 
     # write data to the other participant
     writeData!(sim)

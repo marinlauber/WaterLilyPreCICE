@@ -38,12 +38,12 @@ function Windkessel!(du,u,p,t)
     (VLV, Pao) = u
     (Pfill,Rmv_fwd,Rmv_bwd,Rao_fwd,Rao_bwd,R,C)  = p
 
-    #first calculate PLV from elastance and VLV 
+    #first calculate PLV from elastance and VLV
     PLV = computePLV(t,VLV)
 
     # calculate Qmv, Pfilling>PLV; forward transmitral flow, PLV>Pfilling - backward transmitral flow
     Qmv = Pfill ≥ PLV ? (Pfill-PLV)/Rmv_fwd : (PLV-Pfill)/Rmv_bwd
-    
+
     #calculate Qao, PLV>Pao; forward aortic flow, PLV>Pao; backward aortic flow
     Qao = PLV ≥ Pao ? (PLV-Pao)/Rao_fwd : (Pao-PLV)/Rao_bwd
 
@@ -115,7 +115,7 @@ plot(p1,p2;layout=(1,2))
 # Pfilling  = 5
 # tspan = (0,10)
 # u = [5, 60] # initial conditions
-# # we prescribe the volume from the first solution as dVdt 
+# # we prescribe the volume from the first solution as dVdt
 # dVdt(t;ϵ=5e-2) = (getindex(sol(t+ϵ),1) - getindex(sol(t-ϵ),1)) / (2ϵ)
 # p = [Pfilling, Rmv_fwd, Rmv_bwd, Rao_fwd, Rao_bwd, R_WK2, C_WK2, dVdt]
 
@@ -145,44 +145,44 @@ plot(p1,p2;layout=(1,2))
 
 
 
-# function Windkessel_3!(du,u,p,t)
-#     # unpack
-#     (Vlv,Pa,Pv) = u
-#     (Ra,Ca,Rv,Cv,Rp) = p
+function Windkessel_3!(du,u,p,t)
+    # unpack
+    (Vlv,Pa,Pv) = u
+    (Ra,Ca,Rv,Cv,Rp) = p
 
-#     # dVdt is a prescribed function
-#     Plv = computePLV(t,Vlv;Emin=0.05,Emax=2,V0=20)
+    # dVdt is a prescribed function
+    Plv = computePLV(t,Vlv;Emin=0.05,Emax=2,V0=20)
 
-#     # flow at the two vales
-#     Qa = Plv > Pa ? (Plv - Pa)/Ra : (Pa - Plv)/1e10
-#     Qv = Plv < Pv ? (Pv - Plv)/Rv : (Plv - Pv)/1e10
+    # flow at the two vales
+    Qa = Plv > Pa ? (Plv - Pa)/Ra : (Pa - Plv)/1e10
+    Qv = Plv < Pv ? (Pv - Plv)/Rv : (Plv - Pv)/1e10
 
-#     # rates
-#     du[1] = Qv - Qa                  # dVlv/dt    
-#     du[2] = Qa/Ca + (Pv-Pa)/(Rp*Ca)  # dPa/dt
-#     du[3] = (Pa-Pv)/(Rp*Cv) - Qv/Cv  # dVv/dt
-# end
+    # rates
+    du[1] = Qv - Qa                  # dVlv/dt
+    du[2] = Qa/Ca + (Pv-Pa)/(Rp*Ca)  # dPa/dt
+    du[3] = (Pa-Pv)/(Rp*Cv) - Qv/Cv  # dVv/dt
+end
 
-# tspan = (0,20)
-# u = [60, 70, 8] # initial conditions for Plv, Pa, Pv
-# Ra = 8e6 * 1.333e-8
-# Rp = 3e8 * 1.333e-8
-# Rv = 1e6 * 1.333e-8
-# Ca = 8e-9 * 1.333e8
-# Cv = 5e-8 * 1.333e8
-# p = (Ra,Ca,Rv,Cv,Rp)
+tspan = (0,20)
+u = [60, 70, 8] # initial conditions for Plv, Pa, Pv
+Ra = 8e6 * 1.333e-8
+Rp = 3e8 * 1.333e-8
+Rv = 1e6 * 1.333e-8
+Ca = 8e-9 * 1.333e8
+Cv = 5e-8 * 1.333e8
+p = (Ra,Ca,Rv,Cv,Rp)
 
-# prob = ODEProblem(Windkessel_3!, u, tspan, p)
-# # https://docs.sciml.ai/DiffEqDocs/stable/basics/common_solver_opts
-# @time sol_3 = solve(prob, Tsit5(), dtmax=1e-4)
-# p1=plot(sol_3.t, computePLV.(sol_3.t, sol_3[1,:]), label="P_\\ LV", lw=2, xaxis="Time (t/T)", yaxis="Pressure (mmHg)")
-# plot!(p1,sol_3.t, sol_3[1,:],label="V_\\ LV", lw=2)
-# plot!(p1,sol_3.t, sol_3[2,:], label="P_\\ Aor", lw=2, ls=:dash) #, xlims=(0,10), ylims=(0,100))
-# plot!(p1,sol_3.t, sol_3[3,:], label="P_\\ Ven", lw=2, ls=:dot) #, xlims=(0,10), ylims=(0,100))
-# xlims!(p1,(18,20.5)); ylims!(p1,(0,100))
-# p2=plot(sol_3[1,:], computePLV.(sol_3.t, sol_3[1,:]),label=:none, xlims=(0,150), ylim=(0,150),
-#         xaxis="Volume (ml)", yaxis="Pressure (mmHg)")
-# plot(p1,p2;layout=(1,2),size=(800,400))
+prob = ODEProblem(Windkessel_3!, u, tspan, p)
+# https://docs.sciml.ai/DiffEqDocs/stable/basics/common_solver_opts
+@time sol_3 = solve(prob, Tsit5(), dtmax=1e-4)
+p1=plot(sol_3.t, computePLV.(sol_3.t, sol_3[1,:]), label="P_\\ LV", lw=2, xaxis="Time (t/T)", yaxis="Pressure (mmHg)")
+plot!(p1,sol_3.t, sol_3[1,:],label="V_\\ LV", lw=2)
+plot!(p1,sol_3.t, sol_3[2,:], label="P_\\ Aor", lw=2, ls=:dash) #, xlims=(0,10), ylims=(0,100))
+plot!(p1,sol_3.t, sol_3[3,:], label="P_\\ Ven", lw=2, ls=:dot) #, xlims=(0,10), ylims=(0,100))
+xlims!(p1,(18,20.5)); ylims!(p1,(0,100))
+p2=plot(sol_3[1,:], computePLV.(sol_3.t, sol_3[1,:]),label=:none, xlims=(0,150), ylim=(0,150),
+        xaxis="Volume (ml)", yaxis="Pressure (mmHg)")
+plot(p1,p2;layout=(1,2),size=(800,400))
 # # savefig("Windkessel_in_3.png")
 
 
@@ -193,7 +193,7 @@ plot(p1,p2;layout=(1,2))
 
 #     # dVdt is a prescribed function
 #     dVdt = dVdt_func(t)
-    
+
 #     # what way is the flow going in the aortic valve?
 #     Qa = dVdt < -eps() ? -dVdt : (Pa - Plv)/1e5 # diastole, very small flow
 #     Qv = dVdt >  eps() ?  dVdt : (Plv - Pv)/1e5 # systole, very small flow
@@ -201,21 +201,21 @@ plot(p1,p2;layout=(1,2))
 #     # pressure in the ventricle
 #     Plv = dVdt > eps() ? Pv - dVdt*Rv : (dVdt < -eps() ? -dVdt*Ra + Pa : Plv)
 #     abs(dVdt) > 1e-5 && (u[1] = Plv) # store to access after
-    
+
 #     # dPlv/dt is non-zero only when we have dVdt~0
 #     Cp = 2.4e11
 #     dPdt = abs(dVdt) < 1e-5 ? (find_zero(dpdt->abs2(Cp*dVdt-dpdt), 0),-dPlvdt_func(t)) : (0,0)
 #     @show dPdt
 
 #     # rates
-#     du[1] = -dPdt[2]                     # dPlv/dt  
+#     du[1] = -dPdt[2]                     # dPlv/dt
 #     du[2] = Qa/Ca - (Pa-Pv)/(Rp*Ca)  # dPa/dt
-#     du[3] = (Pa-Pv)/(Rp*Cv) - Qv/Cv  # dVv/dt  
+#     du[3] = (Pa-Pv)/(Rp*Cv) - Qv/Cv  # dVv/dt
 # end
 
 # using ForwardDiff
 # tspan = (0,18)
-# # we prescribe the volume from the first solution as dVdt 
+# # we prescribe the volume from the first solution as dVdt
 # dVdt(t;ϵ=1e-5) = (getindex(sol_3(t+ϵ),1) - getindex(sol_3(t-ϵ),1)) / (2ϵ)
 # dPlvdt(t;ϵ=1e-5) = (computePLV(t+ϵ,getindex(sol_3(t+ϵ),1))-computePLV(t-ϵ,getindex(sol_3(t-ϵ),1)))/(2ϵ)
 

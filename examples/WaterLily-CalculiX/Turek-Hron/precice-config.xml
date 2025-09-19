@@ -41,18 +41,18 @@
 
   <m2n:sockets acceptor="WaterLily" connector="Calculix" exchange-directory=".."/>
 
-  <!-- <coupling-scheme:serial-explicit>
+  <coupling-scheme:serial-explicit>
     <participants first="WaterLily" second="Calculix"/>
     <max-time value="50.0" />
     <time-window-size value="0.005"/>
     <exchange data="Displacements" mesh="Solid-Mesh" from="Calculix" to="WaterLily"/>
     <exchange data="Forces" mesh="Solid-Mesh" from="WaterLily" to="Calculix"/>
-  </coupling-scheme:serial-explicit> -->
-
+  </coupling-scheme:serial-explicit>
+<!-- 
   <coupling-scheme:parallel-implicit>
     <participants first="Calculix" second="WaterLily"/>
     <max-time value="100.0" />
-    <time-window-size value="0.005"/>
+    <time-window-size value="0.01"/>
     <exchange data="Displacements" mesh="Solid-Mesh" from="Calculix" to="WaterLily"/>
     <exchange data="Forces" mesh="Solid-Mesh" from="WaterLily" to="Calculix"/>
     <max-iterations value="50"/>
@@ -67,6 +67,6 @@
       <max-used-iterations value="100" />
       <time-windows-reused value="15" />
     </acceleration:IQN-ILS>
-  </coupling-scheme:parallel-implicit>
+  </coupling-scheme:parallel-implicit> -->
 
 </precice-configuration>

@@ -2,6 +2,8 @@
 *.vtu
 *.vti
 *.pvd
+*.png
+*.gif
 *.log
 *.json
 *precice-run*
@@ -15,3 +17,4 @@
 */WarnNodeMissMultiStage.nam
 examples/0D-CalculiX/Pouch/
 examples/LIMO_4_0D/
+meshes/

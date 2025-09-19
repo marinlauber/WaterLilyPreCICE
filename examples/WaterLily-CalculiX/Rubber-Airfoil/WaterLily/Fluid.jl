@@ -23,15 +23,15 @@ let
 
         # update the this participant and scale forces
         sim_step!(sim); sim.int.forces .*= 2sim.U^2/sim.L
-        sim.int.forces[:,3] .= 0.0 # zero-spanwise forces 
+        sim.int.forces[:,3] .= 0.0 # zero-spanwise forces
         # sim.int.forces[:,2] .= min(sim_time(sim)/2,1)*0.02
-       
+
         # write data to the other participant
         writeData!(sim)
 
         println("WaterLily: Time=",round(WaterLily.time(sim.flow),digits=4),
                            ", Δt=",round(sim.flow.Δt[end],digits=3))
-        
+
         # if we have converged, save if required
         if PreCICE.isTimeWindowComplete()
             # save the data
@@ -40,5 +40,5 @@ let
     end
     close(wr)
 end
-PreCICE.finalize()  
+PreCICE.finalize()
 println("WaterLily: Closing Julia solver...")

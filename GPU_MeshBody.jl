@@ -5,6 +5,8 @@ using BenchmarkTools
 using CUDA
 using Plots
 using Adapt
+using Printf
+using WriteVTK
 
 function load_inp(fname; facetype=GLTriangleFace, pointtype=Point3f)
     #INP file format
@@ -51,8 +53,9 @@ function parse_blocktype!(block, io, line)
     return block, line
 end
 
-locate(tri::SMatrix{T},p::SVector{T}) where T = locate(tri[:,1],tri[:,2],tri[:,3],p)
-function locate(a,b,c,p::SVector{T}) where T
+function locate(tri::SMatrix{T},p::SVector{T}) where T
+    # unpack the triangle vertices
+    a,b,c = tri[:,1],tri[:,2],tri[:,3]
     ab = b.-a
     ac = c.-a
     ap = p.-a
@@ -103,7 +106,9 @@ function locate(a,b,c,p::SVector{T}) where T
 end
 
 # closest triangle index in the mesh
-function closest(mesh,x::SVector{T};kwargs...) where T
+#TODO without the inline, I get an out of bounds error on the GPU...
+# this is interesting
+@inline function closest(mesh,x::SVector{T};kwargs...) where T
     u=1; a=b=d²_fast(mesh[1],x) # fast method
     for I in 2:length(mesh)
         b = d²_fast(mesh[I],x)
@@ -122,13 +127,14 @@ struct MeshBody{T,A<:AbstractArray,S<:AbstractVector{T},F<:Function} <: Abstract
     scale :: T
     half_thk :: T
     function MeshBody(mesh,origin::SVector{3,T},width::SVector{3,T},boundary=true,
-                        map=(x,t)->x,scale=1,half_thk=0) where T
+                      map=(x,t)->x,scale=1,half_thk=0) where T
         new{T,typeof(mesh),typeof(origin),typeof(map)}(mesh,origin,width,boundary,map,T(scale),T(half_thk))
     end
 end
-Adapt.adapt_structure(to, x::MeshBody) = MeshBody(adapt(to, x.mesh), adapt(to, x.origin),
-                                                  adapt(to, x.width), x.boundary, adapt(to, x.map),
-                                                  x.scale, x.half_thk)
+# Adapt.adapt_structure(to, x::MeshBody) = MeshBody(adapt(to, x.mesh), adapt(to, x.origin),
+#                                                   adapt(to, x.width), x.boundary, x.map,
+#                                                   x.scale, x.half_thk)
+Adapt.@adapt_structure MeshBody
 
 function MeshBody(file_name; map=(x,t)->x,boundary=true,half_thk=0,scale=1,mem=Array,T=Float32)
     # read in the mesh
@@ -166,12 +172,12 @@ function WaterLily.measure(body::MeshBody,x::SVector{D,T},t;kwargs...) where {D,
     !body.boundary && (d = abs(d)-body.half_thk)
     return (d,n,-J\dot)
 end
-outside(x::SVector,origin,width) = !(all(origin .≤ x) && all(x .≤ origin+width))
+@fastmath @inline outside(x::SVector,origin,width) = !(all(origin .≤ x) && all(x .≤ origin+width))
 
 using LinearAlgebra: cross
-@inbounds @inline d²_fast(tri::SMatrix,x::SVector) = sum(abs2,x-SVector(sum(tri,dims=2)/3))
-@inbounds @inline normal(tri::SMatrix) = hat(SVector(cross(tri[:,2]-tri[:,1],tri[:,3]-tri[:,1])))
-@inbounds @inline hat(v) = v/(√(v'*v)+eps(eltype(v)))
+@fastmath @inline d²_fast(tri::SMatrix,x::SVector) = sum(abs2,x-SVector(sum(tri,dims=2)/3))
+@fastmath @inline normal(tri::SMatrix) = hat(SVector(cross(tri[:,2]-tri[:,1],tri[:,3]-tri[:,1])))
+@fastmath @inline hat(v) = v/(√(v'*v)+eps(eltype(v)))
 
 # access the WaterLily writer to save the file
 function WaterLily.save!(w,a::MeshBody,t=w.count[1]) #where S<:AbstractSimulation{A,B,C,D,MeshBody}
@@ -196,20 +202,28 @@ function make(L;U=1,mem=CuArray,T=Float32)
         Rz = SA[cos(α) -sin(α) 0; sin(α) cos(α) 0; 0 0 1]
         Rx*Ry*Rz*(x.-L/2.f0).+0.5f0
     end
-
-    body = MeshBody(joinpath(@__DIR__,"meshes/cube.inp");scale=L/2,map,mem)
-    # Simulation((L,L,L),(U,0,0),L;body,mem,T)
+    # make body
+    body = MeshBody(joinpath(@__DIR__, "meshes/cube.inp");scale=L/2,map,mem)
+    # make sim
+    Simulation((L,L,L),(U,0,0),L;body,mem,T)
 end
+
+# make a writer with some attributes, need to output to CPU array to save file (|> Array)
+vtk_velocity(a::AbstractSimulation) = a.flow.u |> Array;
+vtk_pressure(a::AbstractSimulation) = a.flow.p |> Array;
+vtk_body(a::AbstractSimulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a)); a.flow.σ |> Array;)
 
 L = 32
 MEMORY = CuArray
-body = make(L;mem=MEMORY)
+sim = make(L;mem=MEMORY)
+wr = vtkWriter("GPU_meshbody";attrib=Dict("u"=>vtk_velocity, "p"=>vtk_pressure, "d"=>vtk_body))
+sim_step!(sim)
+save!(wr, sim)
+close(wr)
 
-distance = zeros(L+2,L+2,L+2)|> MEMORY;
-@inside distance[I] = sdf(body,loc(0,I))
-flood(distance[:,L÷2+1,:]); contour!(Array(distance)[:,L÷2+1,:]',levels=[0],lw=2)
-
-
+# distance = zeros(L+2,L+2,L+2)|> MEMORY;
+# @inside distance[I] = sdf(sim,loc(0,I))
+# flood(distance[:,L÷2+1,:]); contour!(Array(distance)[:,L÷2+1,:]',levels=[0],lw=2)
 
 
 # import WaterLilyPreCICE: @loop

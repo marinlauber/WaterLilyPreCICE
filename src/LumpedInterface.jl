@@ -19,9 +19,14 @@ mutable struct LumpedInterface{T} <: AbstractInterface
     u₀              :: Union{Nothing,AbstractVector{T}}
     sol             :: AbstractVector
     mesh_store      :: GeometryBasics.Mesh # storage
+    rw_mesh         :: String
+    read_data       :: String
+    write_data      :: String
 end
 
-function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)->0, integrator=nothing, kwargs...)
+function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)->0, integrator=nothing,
+                         participant="LPM", rw_mesh="Solid-Mesh", read_data="Displacements", write_data="Forces",
+                         kwargs...)
 
     # keyword aguments might be specified
     if size(ARGS, 1) < 1
@@ -31,7 +36,7 @@ function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)
     end
 
     # create coupling
-    PreCICE.createParticipant("LPM", configFileName, 0, 1)
+    PreCICE.createParticipant(participant, configFileName, 0, 1)
 
     # load the file
     mesh0,srf_id = load_inp(surface_mesh) # can we get rid of this?
@@ -53,7 +58,7 @@ function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)
     PreCICE.initialize()
 
     # we need to initialize before we can get the mesh points and coordinates
-    (ControlPointsID, ControlPoints) = PreCICE.getMeshVertexIDsAndCoordinates("Solid-Nodes")
+    (ControlPointsID, ControlPoints) = PreCICE.getMeshVertexIDsAndCoordinates(rw_mesh)
     ControlPointsID = Array{Int32}(ControlPointsID)
     vertices = Array{T,2}(transpose(reshape(ControlPoints,reverse(size(ControlPoints)))))
     verts = GeometryBasics.Point3f[]
@@ -79,7 +84,7 @@ function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)
 
     # return interfaceFQ
     LumpedInterface(mesh0,deepcopy(mesh),srf_id,vertices,ControlPointsID,
-                    forces,func,map_id,Δt,V₀,P,integrator,u₀,sol,deepcopy(mesh))
+                    forces,func,map_id,Δt,V₀,P,integrator,u₀,sol,deepcopy(mesh),rw_mesh,read_data,write_data)
 end
 
 """
@@ -88,19 +93,23 @@ end
 Read the coupling data (displacements) and update the mesh position.
 """
 function readData!(interface::LumpedInterface)
-    # set time step
-    dt_precice = PreCICE.getMaxTimeStepSize()
-    #@TODO get max timestep from Lumped model
-    push!(interface.Δt, min(1, dt_precice)) # min physical time step
-
+    println(" Interface calling readData!(interface::LumpedInterface)")
+    # write checkpoint
     if PreCICE.requiresWritingCheckpoint()
+        println(" Writing checkpoint (inside(readData!))")
         # save the mesh at this step
         interface.mesh_store = deepcopy(interface.mesh)
         # save initial condition of ODE solver
         !isnothing(interface.integrator) && (interface.u₀ = deepcopy(interface.integrator.u))
     end
+
+    # set time step
+    dt_precice = PreCICE.getMaxTimeStepSize()
+    #@TODO get max timestep from Lumped model
+    push!(interface.Δt, min(1, dt_precice)) # min physical time step
+
     # Read control point displacements
-    interface.deformation .= PreCICE.readData("Solid-Nodes", "Displacements",
+    interface.deformation .= PreCICE.readData(interface.rw_mesh, interface.read_data,
                                               interface.ControlPointsID, interface.Δt[end])
     # update the mesh so that any measure on it is correct
     points = Point3f[]
@@ -127,7 +136,7 @@ end
 """
     integrate!(a::LumpedInterface)
 
-Integrate the 0D model, this function will step the ODE solver from integrator.t to 
+Integrate the 0D model, this function will step the ODE solver from integrator.t to
 integrator.t + a.Δt[end] and stops exaclty there. It will also store the solution at
 each coupling step.
 """
@@ -150,11 +159,10 @@ function get_Q(a::LumpedInterface)
     N = length(a.V)
     # dVdt|₀ = 0.0
     N==1 && return 0.0
-    return sum(a.V[end-1:end].*SA[-1.,1])/a.Δt[end]
-    # N==2 && return sum(a.V.*SA[-1.,1])/a.Δt[end]
+    # return sum(a.V[end-1:end].*SA[-1.,1])/a.Δt[end]
+    N<4 && return sum(@view(a.V[end-1:end]).*SA[-1.,1])/a.Δt[end]
     # assumes that dV/dt|₀ = 0 and used 2nd order scheme
-    # N==2 && return sum(SA[a.V[2],a.V[1],a.V[2]].*SA[1.,-4.,3.])/2a.Δt[end]
-    # return sum(@view(a.V[end-2:end]).*SA[1.,-4.,3.])/2a.Δt[end]
+    return sum(@view(a.V[end-2:end]).*SA[1.,-4.,3.])/2a.Δt[end]
 end
 
 """
@@ -177,14 +185,18 @@ end
 Write the coupling data.
 """
 function writeData!(interface::LumpedInterface)
+    println(" Interface calling writeData!(interface::LumpedInterface)")
     # write the force at the quad points
-    PreCICE.writeData("Solid-Nodes", "Forces", interface.ControlPointsID, interface.forces)
+    PreCICE.writeData(interface.rw_mesh, interface.write_data,
+                      interface.ControlPointsID, interface.forces)
 
     # do the coupling
     PreCICE.advance(interface.Δt[end]) # advance to t+Δt, check convergence and accelerate data
+    println(" Interface advanced to t+Δt: ", sum(interface.Δt))
 
     # read checkpoint if required or move on
     if PreCICE.requiresReadingCheckpoint()
+        println(" Reading checkpoint (inside writeData!)")
         # revert the mesh
         interface.mesh = deepcopy(interface.mesh_store)
         # pop the flux and pressures

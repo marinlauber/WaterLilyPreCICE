@@ -1,5 +1,5 @@
 ---
-title: 'WaterLilyPreCICE: A WaterLily interface for the PreCICE coupling library'
+title: 'WaterLilyPreCICE.jl: A WaterLily adapter for the PreCICE coupling library'
 tags:
   - Julia
   - PreCICE
@@ -20,11 +20,21 @@ bibliography: paper.bib
 
 # Summary
 
-WaterLilyPreCICE is a .... The code is available at [https://github.com/marinlauber/WaterLilyPreCICE](https://github.com/marinlauber/WaterLilyPreCICE).  
+WaterLilyPreCICE.jl is a Julia interface for the PreCICE coupling library, enables seamless fluid-structure interaction (FSI) simulations by integrating the WaterLily fluid solver with PreCICE's robust coupling capabilities.
+This interface facilitates efficient data exchange and synchronization between WaterLily and other solvers, enhancing the accuracy and stability of FSI simulations.
+The package is designed to be user-friendly, allowing researchers and engineers to easily set up and run coupled simulations involving complex interactions between fluids and structures.
+By leveraging the strengths of both WaterLily and PreCICE, this interface aims to advance the field of multiphysics simulations, providing a powerful tool for studying a wide range of engineering applications.
+The code is available at [https://github.com/marinlauber/WaterLilyPreCICE](https://github.com/marinlauber/WaterLilyPreCICE).  
 
 # Statement of need
 
-[@WaterLily-paper-2025] [@fsi-paper-lauber] 
+Fluid-structure interaction (FSI) simulations are crucial for understanding the complex interplay between fluids and structures in various engineering applications, such as aerospace, automotive, and civil engineering.
+However, setting up and running these simulations can be challenging due to the need for efficient data exchange and synchronization between different solvers, and often different programming languages.
+WaterLilyPreCICE.jl addresses this challenge by providing a Julia interface for the PreCICE coupling library, enabling seamless integration of the WaterLily fluid solver with PreCICE's robust coupling capabilities.
+This interface simplifies the process of setting up FSI simulations, allowing researchers and engineers to focus on their specific applications rather than the intricacies of coupling different solvers.
+By leveraging the strengths of both WaterLily and PreCICE, WaterLilyPreCICE.jl aims to advance the field of multiphysics simulations, providing a powerful tool for studying a wide range of engineering problems involving fluid-structure interactions.
+
+[@WaterLily-paper-2025] [@fsi-paper-lauber]
 
 # Key Features
 
