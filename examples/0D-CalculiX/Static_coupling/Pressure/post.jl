@@ -64,4 +64,4 @@ end
 
 # make the combined plot
 plot(p1, p2, p3, p4, p5, p6, layout=(2,3), size=(1200,600), dpi=300)
-# savefig("curve_3D-0D.png")
+savefig("curve_3D-0D_19092025.png")

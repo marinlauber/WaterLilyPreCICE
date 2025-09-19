@@ -25,8 +25,8 @@ function Windkessel!(du,u,p,t)
     Qao = PLV ≥ Pao ? (PLV-Pao)/Rao_fwd : (Pao-PLV)/Rao_bwd
 
     # rates
-    du[1] = Qmv - Qao          #dVLV/dt=Qmv-Qao
-    du[2] = Qao/C - Pao/(R*C)  #dPao/dt=Qao/C-Pao/RC
+    du[1] = Qmv - Qao          # dVLV/dt=Qmv-Qao
+    du[2] = Qao/C - Pao/(R*C)  # dPao/dt=Qao/C-Pao/RC
     du[3] = 0.0                # un-used u[3] hold the ventricular pressure
 end
 
@@ -56,7 +56,7 @@ let
     # iteration storage
     storage_step = []
     iteration = step = 1
-    Cₕ = 0.256    # relaxation factor for the pressure
+    Cₕ = 0.180    # relaxation factor for the pressure
     mmHg2Pa = 133.322387415
 
     # set model parameters
@@ -65,9 +65,9 @@ let
     EDV = 120                   #ml; end-diastolic volume. We will use EDV with Pvenous to calculate Emin
 
     # Valve resistances
-    Rmv_fwd = 0.002             #mmHg/ml/s; resistance in forward flow direction
+    Rmv_fwd = 0.01             #mmHg/ml/s; resistance in forward flow direction
     Rmv_bwd = 1e10              #mmHg/ml/s; leak resistance
-    Rao_fwd = 0.02             #mmHg/ml/s; resistance in forward flow direction
+    Rao_fwd = 0.01             #mmHg/ml/s; resistance in forward flow direction
     Rao_bwd = 1e10              #mmHg/ml/s; leak resistance
 
     # Arterial model parameters
@@ -76,7 +76,8 @@ let
 
     #Setup
     PLV₁ = PLV₀ = 1.0
-    u₀ = [EDV, 60, Pfilling] # initial conditions
+    P₀ = 6.01
+    u₀ = [EDV, 60, P₀] # initial conditions
     tspan = (0.0, 10.0)
     params = [Pfilling, Rmv_fwd, Rmv_bwd, Rao_fwd, Rao_bwd, R_WK2, C_WK2]
 
@@ -117,14 +118,14 @@ let
         VLV_0D = integrator.u[1] # volume from 0D
 
         # fixed-point for the pressure
-        PLV₁ = max(PLV₀ + Cₕ*(VLV_0D - vol), 0.05)
-        step==1 && (PLV₁ = 16.0) # first time step
+        PLV₁ = max(PLV₀ + Cₕ*(VLV_0D - vol), 0.001)
+        step==1 && (PLV₁ = P₀) # first time step, used EDP to get EDV
         PLV₀ = PLV₁ # for next iteration or next time step
 
         # we then need to recompute the forces with the correct volume and pressure
-        @show mmHg2Pa*PLV₁
+        @show PLV₁+Pact, Pfilling
         compute_forces!(forces, mmHg2Pa*PLV₁, mesh, srf_id, map_id)
-
+        @show sum(forces, dims=1)
         # write the force at the nodes
         PreCICE.writeData("Solid-Mesh", "Forces", ControlPointsID, forces)
 
