@@ -18,13 +18,29 @@ mutable struct LumpedInterface{T} <: AbstractInterface
     integrator      :: Union{Nothing,OrdinaryDiffEq.ODEIntegrator}
     u₀              :: Union{Nothing,AbstractVector{T}}
     sol             :: AbstractVector
-    mesh_store      :: GeometryBasics.Mesh # storage
     rw_mesh         :: String
     read_data       :: String
     write_data      :: String
+    iteration       :: Int
+    step            :: Int
 end
+"""
+    LumpedInterface()
 
-function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)->0, integrator=nothing,
+Arguments:
+- `T`: data type, default is `Float64`
+- `surface_mesh`: path to the surface mesh in CalculiX format, default is `"../Solid/geom.inp"`
+- `func`: function to compute the pressure force on the surface with id="i", the default is just to apply the pressure
+   at the point `p` at time `t`: `(i,t,p)->p` this can be used to switch off and add pressures on different surfaces.
+- `integrator`: an `OrdinaryDiffEq.ODEIntegrator` object to solve the 0D model, if `nothing` is provided,
+   the interface will not solve any 0D model and just apply the pressure at the interface.
+- `participant`: name of the participant in the PreCICE configuration file, default is `"LPM"`
+- `rw_mesh`: name of the mesh to read and write data from/to, default is `"Solid-Mesh"`
+- `read_data`: name of the data to read from the other participant, default is `"Displacements"`
+- `write_data`: name of the data to write to the other participant, default is `"Forces"`
+- `kwargs`: additional keyword arguments to pass to PreCICE
+"""
+function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t,p)->p, integrator=nothing,
                          participant="LPM", rw_mesh="Solid-Mesh", read_data="Displacements", write_data="Forces",
                          kwargs...)
 
@@ -40,19 +56,6 @@ function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)
 
     # load the file
     mesh0,srf_id = load_inp(surface_mesh) # can we get rid of this?
-
-    # check if we need to initialize the data
-    # if PreCICE.requiresInitialData()
-    #     println("Initial data required...")
-    #     forces = zeros(T, size(srf_id))
-    #     map_id = map(((i,F),)->vcat(Base.to_index.(F).data...),enumerate(faces(mesh)))
-    #     forces .= 0 # reset the forces
-    #     for (i,id) in srf_id
-    #         f = dS(@views(mesh[id])).*func(i,t,interface)
-    #         forces[map_id[id],:] .+= transpose(f)./3 # add all the contribution from the faces to the nodes
-    #     end
-    #     PreCICE.writeData("Solid-Nodes", "Forces", interface.ControlPointsID, forces)
-    # end
 
     # initialise PreCICE
     PreCICE.initialize()
@@ -84,7 +87,7 @@ function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t)
 
     # return interfaceFQ
     LumpedInterface(mesh0,deepcopy(mesh),srf_id,vertices,ControlPointsID,
-                    forces,func,map_id,Δt,V₀,P,integrator,u₀,sol,deepcopy(mesh),rw_mesh,read_data,write_data)
+                    forces,func,map_id,Δt,V₀,P,integrator,u₀,sol,rw_mesh,read_data,write_data,1,1)
 end
 
 """
@@ -92,21 +95,17 @@ end
 
 Read the coupling data (displacements) and update the mesh position.
 """
-function readData!(interface::LumpedInterface)
-    println(" Interface calling readData!(interface::LumpedInterface)")
+function readData!(interface::LumpedInterface, dt_solver=1)
     # write checkpoint
     if PreCICE.requiresWritingCheckpoint()
-        println(" Writing checkpoint (inside(readData!))")
-        # save the mesh at this step
-        interface.mesh_store = deepcopy(interface.mesh)
         # save initial condition of ODE solver
-        !isnothing(interface.integrator) && (interface.u₀ = deepcopy(interface.integrator.u))
+        !isnothing(interface.integrator) && (interface.u₀ = [interface.integrator.t, interface.integrator.u...])
     end
 
     # set time step
     dt_precice = PreCICE.getMaxTimeStepSize()
     #@TODO get max timestep from Lumped model
-    push!(interface.Δt, min(1, dt_precice)) # min physical time step
+    push!(interface.Δt, min(dt_solver, dt_precice)) # min physical time step
 
     # Read control point displacements
     interface.deformation .= PreCICE.readData(interface.rw_mesh, interface.read_data,
@@ -124,13 +123,13 @@ end
 
 Updates the interface conditions (the forces) from the interface function.
 """
-function update!(interface::LumpedInterface; integrate=true)
+function update!(interface::LumpedInterface, pressure; integrate=true)
     # stores the volume
     push!(interface.V, volume(interface))
     # update 0D model
     (!isnothing(interface.integrator) && integrate) && integrate!(interface)
     # compute forces
-    get_forces!(interface)
+    compute_forces!(interface, pressure)
 end
 
 """
@@ -140,9 +139,9 @@ Integrate the 0D model, this function will step the ODE solver from integrator.t
 integrator.t + a.Δt[end] and stops exaclty there. It will also store the solution at
 each coupling step.
 """
-function integrate!(a::LumpedInterface)
+function integrate!(a::LumpedInterface, u_new)
     # set initial conditions
-    SciMLBase.set_u!(a.integrator, [get_Q(a),a.u₀[2:end]...])
+    SciMLBase.set_ut!(a.integrator, u_new...)
     # solve that step up to t+Δt
     OrdinaryDiffEq.step!(a.integrator, a.Δt[end], true)
     # save the results
@@ -166,15 +165,16 @@ function get_Q(a::LumpedInterface)
 end
 
 """
-    get_forces!(::LumpedInterface)
+    compute_forces!(::LumpedInterface)
 
 Compute the forces on the interface at t+Δt.
 """
-function get_forces!(interface::LumpedInterface, t=sum(interface.Δt); kwargs...)
+function compute_forces!(interface::LumpedInterface, pressure; kwargs...)
     # compute nodal forces
     interface.forces .= 0 # reset the forces
+    t = sum(interface.Δt)
     for (i,id) in interface.srf_id
-        f = dS(@views(interface.mesh[id])).*interface.func(i,t,interface)
+        f = dS(@views(interface.mesh[id])) .* interface.func(i,t,pressure)
         interface.forces[interface.map_id[id],:] .+= transpose(f)./3 # add all the contribution from the faces to the nodes
     end
 end
@@ -185,27 +185,22 @@ end
 Write the coupling data.
 """
 function writeData!(interface::LumpedInterface)
-    println(" Interface calling writeData!(interface::LumpedInterface)")
     # write the force at the quad points
     PreCICE.writeData(interface.rw_mesh, interface.write_data,
                       interface.ControlPointsID, interface.forces)
 
     # do the coupling
     PreCICE.advance(interface.Δt[end]) # advance to t+Δt, check convergence and accelerate data
-    println(" Interface advanced to t+Δt: ", sum(interface.Δt))
 
-    # read checkpoint if required or move on
+    #  revert to sum(Δt) = t
     if PreCICE.requiresReadingCheckpoint()
-        println(" Reading checkpoint (inside writeData!)")
-        # revert the mesh
-        interface.mesh = deepcopy(interface.mesh_store)
-        # pop the flux and pressures
-        pop!(interface.Δt); pop!(interface.V); pop!(interface.P)
-        # revert state of ODE solver
-        if !isnothing(interface.integrator)
-            pop!(interface.sol) # this is not a good solution, kill it
-            SciMLBase.set_ut!(interface.integrator, interface.u₀, sum(interface.Δt)) # revert to t since we have poped dt
-        end
+        # remove last time step since we are going back
+        pop!(interface.Δt)
+        interface.iteration += 1
+    else
+        # we can move on, reset counter and increment step
+        interface.iteration = 1
+        interface.step += 1
     end
 end
 

@@ -2,9 +2,9 @@ participants:
 
     Calculix:
         interfaces:
-        - nodes-mesh: Solid-Nodes
+        - nodes-mesh: Solid-Mesh
           patch: interface
           write-data: [Displacements]
           read-data: [Forces]
 
-precice-config-file: ../precice-config-interface.xml
+precice-config-file: ../precice-config.xml

@@ -169,6 +169,6 @@ include("GismoInterface.jl")
 export GismoInterface
 
 include("LumpedInterface.jl")
-export LumpedInterface
+export LumpedInterface,integrate!,compute_forces!
 
 end # module
