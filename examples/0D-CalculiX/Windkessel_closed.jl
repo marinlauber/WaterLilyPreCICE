@@ -11,9 +11,7 @@ HR = 60                     #heart rate in beats/min
 
 # Valve resistances
 Rmv_fwd = 0.002             #mmHg/ml/s; resistance in forward flow direction
-Rmv_bwd = 1e10              #mmHg/ml/s; leak resistance
 Rao_fwd = 0.002             #mmHg/ml/s; resistance in forward flow direction
-Rao_bwd = 1e10              #mmHg/ml/s; leak resistance
 
 # Arterial model parameters
 R_WK2 = 1                   #mmHg/ml/s
@@ -37,13 +35,13 @@ function Windkessel_3!(du,u,p,t)
     Plv = computePLV(t,Vlv;Emin=0.05,Emax=2,V0=20)
 
     # flow at the two vales
-    Qa = Plv > Pa ? (Plv - Pa)/Ra : (Pa - Plv)/1e10
-    Qv = Plv < Pv ? (Pv - Plv)/Rv : (Plv - Pv)/1e10
+    Qmv = Plv < Pv ? (Pv - Plv)/Rv : (Plv - Pv)/1e10
+    Qao = Plv > Pa ? (Plv - Pa)/Ra : (Pa - Plv)/1e10
 
     # rates
-    du[1] = Qv - Qa                  # dVlv/dt
-    du[2] = Qa/Ca + (Pv-Pa)/(Rp*Ca)  # dPa/dt
-    du[3] = (Pa-Pv)/(Rp*Cv) - Qv/Cv  # dVv/dt
+    du[1] = Qmv - Qao                  # dVlv/dt
+    du[2] = Qao/Ca + (Pv-Pa)/(Rp*Ca)  # dPa/dt
+    du[3] = (Pa-Pv)/(Rp*Cv) - Qmv/Cv  # dPv/dt
 end
 
 tspan = (0,20)
@@ -62,7 +60,7 @@ p1=plot(sol_3.t, computePLV.(sol_3.t, sol_3[1,:]), label="P_\\ LV", lw=2, xaxis=
 plot!(p1,sol_3.t, sol_3[1,:],label="V_\\ LV", lw=2)
 plot!(p1,sol_3.t, sol_3[2,:], label="P_\\ Aor", lw=2, ls=:dash) #, xlims=(0,10), ylims=(0,100))
 plot!(p1,sol_3.t, sol_3[3,:], label="P_\\ Ven", lw=2, ls=:dot) #, xlims=(0,10), ylims=(0,100))
-xlims!(p1,(18,20.5)); ylims!(p1,(0,100))
+xlims!(p1,(0,20.5)); ylims!(p1,(0,100))
 p2=plot(sol_3[1,:], computePLV.(sol_3.t, sol_3[1,:]),label=:none, xlims=(0,150), ylim=(0,150),
         xaxis="Volume (ml)", yaxis="Pressure (mmHg)")
 plot(p1,p2;layout=(1,2),size=(800,400))
