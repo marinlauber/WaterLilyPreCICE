@@ -6,20 +6,21 @@ function Elastance(t;Emin=0.0,Emax=1.0,a₁=0.303,a₂=0.508,n₁=1.32,n₂=21.9
     (Emax-Emin) * α * (t%1/a₁)^n₁ / (1+(t%1/a₁)^n₁) * inv(1+(t%1/(a₂))^n₂)  + Emin
 end
 
-# open-loop windkessel
+# closed-loop windkessel
 function Windkessel!(du,u,p,t)
     # unpack
-    (Vlv,Pa,Plv) = u
-    (Ra,Ca,Rv,Rp,Pv)  = p
+    (Vlv,Pa,Pv,Plv) = u
+    (Ra,Ca,Rv,Cv,Rp) = p
 
     # flow at the two vales
-    Qmv = Pv ≥ Plv ? (Pv - Plv)/Rv : (Plv - Pv)/1e10
-    Qao = Plv ≥ Pa ? (Plv - Pa)/Ra : (Pa - Plv)/1e10
+    Qmv = Plv < Pv ? (Pv - Plv)/Rv : (Plv - Pv)/1e10
+    Qao = Plv > Pa ? (Plv - Pa)/Ra : (Pa - Plv)/1e10
 
     # rates
-    du[1] = Qmv - Qao             # dVlv/dt=Qmv-Qao
-    du[2] = Qao/Ca - Pa/(Rp*Ca)   # dPa/dt=Qao/C-Pao/RC
-    du[3] = 0.0                   # un-used u[3] hold the ventricular pressure
+    du[1] = Qmv - Qao                 # dVlv/dt
+    du[2] = Qao/Ca + (Pv-Pa)/(Rp*Ca)  # dPa/dt
+    du[3] = (Pa-Pv)/(Rp*Cv) - Qmv/Cv  # dPv/dt
+    du[4] = 0.0                       # un-used u[4] hold the ventricular pressure
 end
 
 # compute the volume of the mesh, assumes the sphere is centered at 0 and is uniformly deformed
@@ -27,23 +28,29 @@ end
 
 # main loop
 let
-    # iteration storage
+     # iteration storage
     storage_step = []
     Cₕ = 0.180              # relaxation factor for the pressure
     mmHg2Pa = 133.322387415
-    Pv = 6.0                #mmHg; to reach EDV 120ml with sphere
     EDV = 120               #ml; end-diastolic volume. We will use EDV with Pvenous to calculate Emin
     Rv = 0.01               #mmHg/ml/s; resistance in forward flow direction
     Ra = 0.01               #mmHg/ml/s; resistance in forward flow direction
     Rp = 1                  #mmHg/ml/s
     Ca = 2                  #ml/mmHg
+    Cv = 6.0                #
+
+    # Ra = 8e6 * 1.333e-8
+    # Rp = 3e8 * 1.333e-8
+    # Rv = 1e6 * 1.333e-8
+    # Ca = 8e-9 * 1.333e8
+    # Cv = 5e-8 * 1.333e8
 
     # setup
     PLV₁ = PLV₀ = 1.0
     P₀ = 6.01
-    u₀ = [EDV, 60, P₀]           # initial conditions
+    u₀ = [EDV, 60, 6.0, P₀]           # initial conditions
     tspan = (0.0, 10.0)
-    params = (Ra,Ca,Rv,Rp,Pv)
+    params = (Ra,Ca,Rv,Cv,Rp)
 
     # generate a problem to solve
     prob = ODEProblem(Windkessel!, u₀, tspan, params)
@@ -69,7 +76,7 @@ let
         readData!(interface)
 
         # solve the ODE to get VLV and Pao at t+Δt, fill the initial condition with current state
-        integrate!(interface, [[interface.u₀[2], interface.u₀[3], PLV₁+Pact], interface.u₀[1]])
+        integrate!(interface, [[interface.u₀[2:4]..., PLV₁+Pact], interface.u₀[1]])
 
         # the target and current volume
         VLV_0D = interface.integrator.u[1]
@@ -87,13 +94,13 @@ let
         writeData!(interface)
 
         # just to keep track of the values
-        Pa,Plv = interface.integrator.u[2:3]
+        Pa,Pv,Plv = interface.integrator.u[2:4]
         Qmv = Pv ≥ Plv ? (Pv-Plv)/Rv : (Plv-Pv)/1e10
         Qao = Plv ≥ Pa ? (Plv-Pa)/Ra : (Pa-Plv)/1e10
 
         # save the data
         push!(storage_step, [interface.step, interface.iteration, sum(interface.Δt), PLV₁+Pact, Pact, vol,
-                             VLV_0D, interface.integrator.u[2], Qao, Qmv, Plv, Pv])
+                             VLV_0D, Pa, Qao, Qmv, Plv, Pv])
 
         # if we have converged, save if required
         if PreCICE.isTimeWindowComplete()
