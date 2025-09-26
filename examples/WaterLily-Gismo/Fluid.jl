@@ -8,9 +8,8 @@ using WriteVTK
 # needed to enable set operations on boundary curves
 # ParametricBodies.notC¹(l::NurbsLocator{C},uv) where C<:NurbsCurve{n,d} where {n,d} = false
 
-
 let # setting local scope for dt outside of the while loop
-    
+
     # Simulation parameters
     L,Re,U,Lref,Uref = 2^5,100,1,1.0,10.0
     center = SA[2.95L,0]
@@ -26,23 +25,20 @@ let # setting local scope for dt outside of the while loop
     store = Store(sim) # allows checkpointing
 
     # make a writer with some attributes
-    velocity(a::Simulation) = a.flow.u |> Array;
-    pressure(a::Simulation) = a.flow.p |> Array;
-    _body(a::Simulation) = (measure_sdf!(a.flow.σ, a.body); 
-                            a.flow.σ |> Array;)
-    vorticity(a::Simulation) = (@inside a.flow.σ[I] = 
-                                WaterLily.curl(3,I,a.flow.u)*a.L/a.U;
-                                a.flow.σ |> Array;)
-    _vbody(a::Simulation) = a.flow.V |> Array;
-    mu0(a::Simulation) = a.flow.μ₀ |> Array;
+    vtk_velocity(a::Simulation) = a.flow.u |> Array;
+    vtk_pressure(a::Simulation) = a.flow.p |> Array;
+    vtk_body(a::Simulation) = (measure_sdf!(a.flow.σ, a.body); a.flow.σ |> Array;)
+    vtk_vorticity(a::Simulation) = (@inside a.flow.σ[I] = WaterLily.curl(3,I,a.flow.u)*a.L/a.U; a.flow.σ |> Array;)
+    vtk_vbody(a::Simulation) = a.flow.V |> Array;
+    vtk_mu0(a::Simulation) = a.flow.μ₀ |> Array;
 
     custom_attrib = Dict(
-        "u" => velocity,
-        "p" => pressure,
-        "d" => _body,
-        "ω" => vorticity,
-        "v" => _vbody,
-        "μ₀" => mu0
+        "u" => vtk_velocity,
+        "p" => vtk_pressure,
+        "d" => vtk_body,
+        "ω" => vtk_vorticity,
+        "v" => vtk_vbody,
+        "μ₀" => vtk_mu0
     )# this maps what to write to the name in the file
 
     # writer for the sim
@@ -64,11 +60,11 @@ let # setting local scope for dt outside of the while loop
 
         # write data to the other participant
         writeData!(interface, sim, store)
-        
+
         # if we have converged, save if required
         if PreCICE.isTimeWindowComplete()
             # save the data
-            mod(iter,every)==0 && write!(wr, sim)
+            mod(iter,every)==0 && save!(wr, sim)
             iter += 1
             # ...
         end

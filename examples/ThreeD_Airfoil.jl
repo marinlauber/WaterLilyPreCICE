@@ -2,7 +2,7 @@ using WaterLilyPreCICE,StaticArrays,WriteVTK
 
 function make_sphere(;L=32,Re=1000,St=0.3,U=1,mem=Array)
     # make the body from the stl mesh
-    body = MeshBody(joinpath(@__DIR__,"../meshes/naca.inp");scale=L,
+    body = MeshBody(joinpath(@__DIR__,"../meshes/naca/naca.inp");scale=L,
                     map=(x,t)->x.+SA[L/2,L*(1+sin(2π*t*St/L)/5),0])
     # generate sim
     Simulation((3L,2L,L÷2), (U,0,0), L; ν=U*L/Re, body, mem)
@@ -11,7 +11,7 @@ end
 # make a writer with some attributes to output to the file
 vtk_velocity(a::Simulation) = a.flow.u |> Array;
 vtk_pressure(a::Simulation) = a.flow.p |> Array;
-vtk_body(a::Simulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a.flow)); a.flow.σ |> Array;) 
+vtk_body(a::Simulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a.flow)); a.flow.σ |> Array;)
 vtk_mu0(a::Simulation) = a.flow.μ₀ |> Array;
 custom_attrib = Dict("u"=>vtk_velocity, "p"=>vtk_pressure, "d"=>vtk_body, "μ₀"=>vtk_mu0)
 # vtk attributes for the MeshBody
@@ -37,7 +37,7 @@ forces = []
         WaterLilyPreCICE.update!(sim.body,sum(sim.flow.Δt),sim.flow.Δt[end])
         sim_step!(sim; remeasure=true)
     end
-    write!(wr, sim); write!(wr_mesh, sim.body, sim_time(sim))
+    save!(wr, sim); save!(wr_mesh, sim.body, sim_time(sim))
     fm = -2sum(WaterLilyPreCICE.forces(sim.body, sim.flow))/(sim.L/2)^2
     println("Surface pressure force: ", round.(fm,digits=4))
     pf = -2WaterLily.pressure_force(sim)/(sim.L/2)^2

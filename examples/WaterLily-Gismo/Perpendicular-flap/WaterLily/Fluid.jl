@@ -1,17 +1,17 @@
 using WaterLilyPreCICE,ParametricBodies,StaticArrays,WriteVTK
 
 # make a writer with some attributes
-velocity(a::AbstractSimulation) = a.flow.u |> Array;
-pressure(a::AbstractSimulation) = a.flow.p |> Array;
-_body(a::AbstractSimulation) = (measure_sdf!(a.flow.σ, a.body); a.flow.σ |> Array;)
-vorticity(a::AbstractSimulation) = (@inside a.flow.σ[I] = WaterLily.curl(3,I,a.flow.u)*a.L/a.U; a.flow.σ |> Array;)
-_vbody(a::AbstractSimulation) = a.flow.V |> Array;
-mu0(a::AbstractSimulation) = a.flow.μ₀ |> Array;
+vtk_velocity(a::AbstractSimulation) = a.flow.u |> Array;
+vtk_pressure(a::AbstractSimulation) = a.flow.p |> Array;
+vtk_body(a::AbstractSimulation) = (measure_sdf!(a.flow.σ, a.body); a.flow.σ |> Array;)
+vtk_vorticity(a::AbstractSimulation) = (@inside a.flow.σ[I] = WaterLily.curl(3,I,a.flow.u)*a.L/a.U; a.flow.σ |> Array;)
+vtk_vbody(a::AbstractSimulation) = a.flow.V |> Array;
+vtk_mu0(a::AbstractSimulation) = a.flow.μ₀ |> Array;
 
 custom_attrib = Dict(
-    "u" => velocity, "p" => pressure,
-    "d" => _body,  "ω" => vorticity,
-    "v" => _vbody, "μ₀" => mu0
+    "u" => vtk_velocity, "p" => vtk_pressure,
+    "d" => vtk_body,  "ω" => vtk_vorticity,
+    "v" => vtk_vbody, "μ₀" => vtk_mu0
 )# this maps what to write to the name in the file
 
 # needed to enable set operations on boundary curves
@@ -50,11 +50,11 @@ let # setting local scope for dt outside of the while loop
 
         # write data to the other participant
         writeData!(sim)
-        
+
         # if we have converged, save if required
         if PreCICE.isTimeWindowComplete()
             # save the data
-            mod(iter,every)==0 && write!(wr, sim)
+            mod(iter,every)==0 && save!(wr, sim)
             iter += 1
             # ...
         end

@@ -1,7 +1,6 @@
 using PreCICE
-using CirculatorySystemModels
-using ModelingToolkit
 using OrdinaryDiffEq
+import OrdinaryDiffEqCore: ODEIntegrator
 
 mutable struct LumpedInterface{T} <: AbstractInterface
     mesh0           :: GeometryBasics.Mesh # initial geometry, never changed
@@ -15,7 +14,7 @@ mutable struct LumpedInterface{T} <: AbstractInterface
     Δt              :: AbstractVector{T}  # time step vector
     V               :: AbstractVector{T}  # flow rate vector
     P               :: AbstractVector{T}  # pressure vector
-    integrator      :: Union{Nothing,OrdinaryDiffEq.ODEIntegrator}
+    integrator      :: Union{Nothing,ODEIntegrator}
     u₀              :: Union{Nothing,AbstractVector{T}}
     sol             :: AbstractVector
     rw_mesh         :: String
@@ -218,17 +217,17 @@ function volume(a::LumpedInterface)
     end
     return sum(vol)/3
 end
-
-import WaterLily
-function WaterLily.save!(w,a::LumpedInterface)
-    k = w.count[1]
-    points = hcat([[p.data...] for p ∈ a.mesh0.position]...)
-    cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, Base.to_index.(face)) for face in faces(a.mesh0)]
-    vtk = vtk_grid(w.dir_name*@sprintf("/%s_%06i", w.fname, k), points, cells)
-    for (name,func) in w.output_attrib
-        # point/vector data must be oriented in the same way as the mesh
-        vtk[name] = ndims(func(a))==1 ? func(a) : permutedims(func(a))
-    end
-    vtk_save(vtk); w.count[1]=k+1
-    w.collection[round(sum(a.Δt),digits=4)]=vtk
-end
+# # https://examples.vtk.org/site/Cxx/GeometricObjects/IsoparametricCellsDemo/
+# import WaterLily
+# function WaterLily.save!(w, a::LumpedInterface; vtkcell_type=celltype(a.mesh))
+#     k = w.count[1]
+#     points = hcat([[p.data...] for p ∈ a.mesh0.position]...)
+#     cells = [MeshCell(vtkcell_type, Base.to_index.(face)) for face in faces(a.mesh0)]
+#     vtk = vtk_grid(w.dir_name*@sprintf("/%s_%06i", w.fname, k), points, cells)
+#     for (name,func) in w.output_attrib
+#         # point/vector data must be oriented in the same way as the mesh
+#         vtk[name] = ndims(func(a))==1 ? func(a) : permutedims(func(a))
+#     end
+#     vtk_save(vtk); w.count[1]=k+1
+#     w.collection[round(sum(a.Δt),digits=4)]=vtk
+# end

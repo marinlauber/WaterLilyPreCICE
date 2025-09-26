@@ -20,10 +20,6 @@ include("MeshBodies.jl")
 export MeshBody
 @reexport using GeometryBasics
 
-# include the KDTree
-include("Tree.jl")
-export BVH_simple,BoundingBox
-
 # structure for coupled simulation
 mutable struct CoupledSimulation <: AbstractSimulation
     sim :: Simulation
@@ -76,7 +72,7 @@ function CoupledSimulation(args...; T=Float64, mem=Array, interface=:Interface, 
                                     "of the structural mesh is zero. If this is not the case, the interface will not work as expected.")
     end
 
-     # keyword aguments might be specified
+    # keyword aguments might be specified
     if size(ARGS, 1) < 1
         configFileName = "precice-config.xml"
     else
@@ -170,5 +166,36 @@ export GismoInterface
 
 include("LumpedInterface.jl")
 export LumpedInterface,integrate!,compute_forces!
+
+using Printf: @sprintf
+import WaterLily
+using WriteVTK
+
+# access the WaterLily writer to save the file
+function WaterLily.save!(w,a::S,t=w.count[1],vtkcell_type=celltype(a.mesh)) where S<:Union{MeshBody,LumpedInterface}
+    k = w.count[1]
+    points = hcat([[p.data...] for p ∈ a.mesh.position]...)
+    cells = [MeshCell(vtkcell_type, Base.to_index.(face)) for face in faces(a.mesh)]
+    vtk = vtk_grid(w.dir_name*@sprintf("/%s_%06i", w.fname, k), points, cells)
+    for (name,func) in w.output_attrib
+        # point/vector data must be oriented in the same way as the mesh
+        vtk[name] = ndims(func(a))==1 ? func(a) : permutedims(func(a))
+    end
+    vtk_save(vtk); w.count[1]=k+1
+    w.collection[round(t,digits=4)]=vtk
+end
+function WaterLily.save!(w,::AbstractBody,t) end # do nothing
+function WaterLily.save!(w,a::WaterLily.SetBody,t=w.count[1])
+    WaterLily.save!(w,a.a,t)
+    WaterLily.save!(w,a.b,t)
+end
+# https://examples.vtk.org/site/Cxx/GeometricObjects/IsoparametricCellsDemo/
+function celltype(mesh)
+    N = length(first(faces(mesh)))
+    N==3 && return VTKCellTypes.VTK_TRIANGLE
+    N==4 && return VTKCellTypes.VTK_QUAD
+    N==6 && return VTKCellTypes.VTK_QUADRATIC_TRIANGLE
+    N==8 && return VTKCellTypes.VTK_QUADRATIC_QUAD
+end
 
 end # module

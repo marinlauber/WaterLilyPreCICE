@@ -27,9 +27,9 @@ end
 
 function make_airfoil(;L=32,Re=1000,St=0.3,U=1,mem=Array)
     # make the body from the stl mesh
-    body = MeshBody(joinpath(@__DIR__,"../meshes/naca.inp");scale=L,
+    body = MeshBody(joinpath(@__DIR__,"../meshes/naca/naca.inp");scale=L,
                     map=(x,t)->x.+SA[L/2,L,0])
-    
+
     # generate sim without a body
     sim = Simulation((3L,2L,L÷2), (U,0,0), L; ν=U*L/Re, mem)
 

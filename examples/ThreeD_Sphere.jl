@@ -2,8 +2,8 @@ using WaterLilyPreCICE,StaticArrays,WriteVTK
 
 function make_sphere(;L=32,Re=250,U=1,mem=Array)
     # make the body from the stl mesh
-    meshes = ["sphere.stl","sphere.inp","sphere_srf.inp"]
-    body = MeshBody(joinpath(@__DIR__,"../meshes/"*meshes[rand(1:3)]);scale=L/2,
+    meshes = ["sphere.stl","sphere.inp"]
+    body = MeshBody(joinpath(@__DIR__,"../meshes/"*meshes[rand(1:2)]);scale=L/2,
                     map=(x,t)->x.+L/2)
     # generate sim
     Simulation((2L,L,L), (U,0,0), L; ν=U*L/Re, body, mem)

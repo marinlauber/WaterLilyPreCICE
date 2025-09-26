@@ -24,7 +24,7 @@ end
 
 function make_sphere(;L=32,Re=250,U=1,mem=Array)
     # make the body from the stl mesh
-    body = MeshBody(joinpath(@__DIR__,"../meshes/aorta.inp");scale=L/2,
+    body = MeshBody(joinpath(@__DIR__,"../meshes/aorta/aorta.inp");scale=L/2,
                     map=(x,t)->x+SA[L/2,L/2,L/4],boundary=false,thk=2.f0)
     # generate sim
     Simulation((L,L,L÷2), (0,0,0), L; ν=U*L/Re, body, mem)

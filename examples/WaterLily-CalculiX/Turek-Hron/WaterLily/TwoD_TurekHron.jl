@@ -6,15 +6,12 @@ mag(I,u) = √sum(ntuple(i->0.25*(u[I,i]+u[I+δ(i,I),i])^2,length(I)))
 
 function make_sim(;L=128,Re=1e3,U=1,T=Float32)
     # move the geometry to the center of the domain
-    # map(x,t) = x .+ SA{T}[0.25L/0.41,0.2L/0.41,0]
-    map(x,t) = x .+ SA{T}[4L,4L,0]
+    map(x,t) = x .+ SA{T}[0.25L/0.41,0.2L/0.41,0]
 
     # make the body from the stl mesh and the sdf wall
     flap = MeshBody(joinpath(@__DIR__,"../CalculiX/surface.inp");map,scale=1.f0)
-    wall = AutoBody((x,t)->4L - abs(x[2]-4L) - 1.5f0)
-    # wall = AutoBody((x,t)->L÷2 - abs(x[2]-L÷2) - 1.5f0)
-    # cylinder = AutoBody((x,t)->√sum(abs2,x.-0.2f0L/0.41f0)-0.05f0L/0.41f0)
-    cylinder = AutoBody((x,t)->√sum(abs2,x.-4L)-0.05f0L/0.41f0)
+    wall = AutoBody((x,t)->L÷2 - abs(x[2]-L÷2) - 1.5f0)
+    cylinder = AutoBody((x,t)->√sum(abs2,x.-0.2f0L/0.41f0)-0.05f0L/0.41f0)
     TurekHron = cylinder + flap + wall
 
     # impulse
@@ -27,8 +24,8 @@ function make_sim(;L=128,Re=1e3,U=1,T=Float32)
         return C(t)*max(convert(T, 1.5*U*((x[2]-1.5f0)/(L-3))*(1.0-(x[2]-1.5f0)/(L-3))/0.5^2), 0.f0)
     end
 
-    # generate sim (6L,L)
-    Simulation((16L,8L), uBC, L; U=U, ν=U*L/Re, body=TurekHron, exitBC=false)
+    # generate sim
+    Simulation((6L,L), uBC, L; U=U, ν=U*L/Re, body=TurekHron, exitBC=true)
 end
 
 # make the sim
@@ -45,7 +42,7 @@ R = inside(sim.flow.p)
     @inside sim.flow.σ[I] = sim.flow.p[I] #mag(I,sim.flow.u)
     @inside sim.flow.σ[I] = ifelse(sdf(sim.body,loc(0,I),0.)<0,NaN,sim.flow.σ[I])
     flood(sim.flow.σ[R],clims=(-2,2), axis=([], false),
-          cfill=:jet,legend=false,border=:none,size=(6*sim.L,sim.L))
+          cfill=:jet,legend=false,border=:none,size=size(sim.flow.p).-2)
     fm = 2sum(WaterLilyPreCICE.forces(sim.body, sim.flow))/(sim.L/2)^2
     println("Surface pressure force: ", round.(fm,digits=4))
     pf = 2WaterLily.pressure_force(sim.flow, sim.body.a.b)/(sim.L/2)^2
