@@ -35,7 +35,7 @@ let
         # if we have converged, save if required
         if PreCICE.isTimeWindowComplete()
             # save the data
-            length(sim.flow.Δt)%5==0 && write!(wr, sim)
+            length(sim.flow.Δt)%5==0 && save!(wr, sim)
         end
     end
     close(wr)

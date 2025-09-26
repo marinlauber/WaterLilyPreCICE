@@ -1,38 +1,12 @@
 using WaterLilyPreCICE,StaticArrays,WriteVTK
 
-import WaterLily: @loop
-function measure_CPU!(μ₀,μ₁,V,σ::AbstractArray{T,N},body::AbstractBody;t=zero(T),ϵ=1) where {T,N}
-    V .= zero(T); μ₀ .= one(T); μ₁ .= zero(T); d²=(2+ϵ)^2
-    @fastmath @inline function fill!(μ₀,μ₁,V,d,I)
-        d[I] = sdf(body,loc(0,I,T),t,fastd²=d²)
-        if d[I]^2<d²
-            for i ∈ 1:N
-                dᵢ,nᵢ,Vᵢ = measure(body,loc(i,I,T),t,fastd²=d²)
-                V[I,i] = Vᵢ[i]
-                μ₀[I,i] = WaterLily.μ₀(dᵢ,ϵ)
-                for j ∈ 1:N
-                    μ₁[I,i,j] = WaterLily.μ₁(dᵢ,ϵ)*nᵢ[j]
-                end
-            end
-        elseif d[I]<zero(T)
-            for i ∈ 1:N
-                μ₀[I,i] = zero(T)
-            end
-        end
-    end
-    @loop fill!(μ₀,μ₁,V,σ,I) over I ∈ inside(σ)
-    BC!(μ₀,zeros(SVector{N,T}),false)
-    BC!(V ,zeros(SVector{N,T}),false)
-end
-
-function make_airfoil(;L=64,Re=1000,St=0.3,U=1,mem=Array)
+function make_airfoil(;L=64,Re=1000,α = -π/20,U=1,mem=Array)
 
     # angle of attack
-    α = -π/20
     R = SA[cos(α) -sin(α) 0; sin(α) cos(α) 0; 0 0 1]
 
     # make the body from the stl mesh
-    body = MeshBody(joinpath(@__DIR__,"../meshes/IWS_kessi/InflatableWing.inp");scale=1.1111110568046572L,
+    body = MeshBody(joinpath(@__DIR__,"../meshes/IWS_kessi/InflatableWing.inp");scale=1.11L,
                     map=(x,t)->R*(x.+SA[L/2,L,L/4]))
 
     # generate sim without a body
@@ -45,7 +19,7 @@ function make_airfoil(;L=64,Re=1000,St=0.3,U=1,mem=Array)
     μ₁ = Array(sim.flow.μ₁)
 
     # measure on the CPU
-    measure_CPU!(μ₀,μ₁,V,σ,body)
+    WaterLilyPreCICE.measure_CPU!(μ₀,μ₁,V,σ,body)
 
     # put back on the GPU
     copyto!(sim.flow.σ, σ)
@@ -73,8 +47,8 @@ using CUDA
 sim,body = make_airfoil(L=128;mem=CuArray)
 
 # make the paraview writer
-wr = vtkWriter("Airfoil";attrib=custom_attrib)
-wr_mesh = vtkWriter("Airfoil_mesh";attrib=custom)
+wr = vtkWriter("IWS";attrib=custom_attrib)
+wr_mesh = vtkWriter("IWS_mesh";attrib=custom)
 
 # duration and write steps
 t₀,duration,step = 0.,10.0,0.2

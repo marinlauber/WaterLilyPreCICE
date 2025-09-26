@@ -51,3 +51,28 @@ function getDeformation(points,knots)
     ncp = [length(knot)-count(i->i==0,knot) for knot in knots]
     return [points[:,1+sum(ncp[1:i])-ncp[1]:sum(ncp[1:i])] for i in 1:length(ncp)]
 end
+
+import WaterLily: @loop
+function measure_CPU!(μ₀,μ₁,V,σ::AbstractArray{T,N},body::AbstractBody;t=zero(T),ϵ=1) where {T,N}
+    V .= zero(T); μ₀ .= one(T); μ₁ .= zero(T); d²=(2+ϵ)^2
+    @fastmath @inline function fill!(μ₀,μ₁,V,d,I)
+        d[I] = sdf(body,loc(0,I,T),t,fastd²=d²)
+        if d[I]^2<d²
+            for i ∈ 1:N
+                dᵢ,nᵢ,Vᵢ = measure(body,loc(i,I,T),t,fastd²=d²)
+                V[I,i] = Vᵢ[i]
+                μ₀[I,i] = WaterLily.μ₀(dᵢ,ϵ)
+                for j ∈ 1:N
+                    μ₁[I,i,j] = WaterLily.μ₁(dᵢ,ϵ)*nᵢ[j]
+                end
+            end
+        elseif d[I]<zero(T)
+            for i ∈ 1:N
+                μ₀[I,i] = zero(T)
+            end
+        end
+    end
+    @loop fill!(μ₀,μ₁,V,σ,I) over I ∈ inside(σ)
+    BC!(μ₀,zeros(SVector{N,T}),false)
+    BC!(V ,zeros(SVector{N,T}),false)
+end
