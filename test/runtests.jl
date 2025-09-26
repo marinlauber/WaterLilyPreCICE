@@ -96,7 +96,7 @@ import LinearAlgebra: cross
     end
 end
 @testset "WaterLilyPreCICE" begin
-    @test 1=1
+    @test true
 end
 # @testset "Interface.jl" begin
     # @test_nowarn
