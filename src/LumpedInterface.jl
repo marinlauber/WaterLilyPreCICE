@@ -1,4 +1,3 @@
-using PreCICE
 using OrdinaryDiffEq
 import OrdinaryDiffEqCore: ODEIntegrator
 
@@ -169,12 +168,14 @@ end
 Compute the forces on the interface at t+Δt.
 """
 function compute_forces!(interface::LumpedInterface, pressure; kwargs...)
+    # how many nodes per face
+    N = length(interface.map_id[1])
     # compute nodal forces
     interface.forces .= 0 # reset the forces
     t = sum(interface.Δt)
     for (i,id) in interface.srf_id
         f = dS(@views(interface.mesh[id])) .* interface.func(i,t,pressure)
-        interface.forces[interface.map_id[id],:] .+= transpose(f)./3 # add all the contribution from the faces to the nodes
+        interface.forces[interface.map_id[id],:] .+= transpose(f)./N # add all the contribution from the faces to the nodes
     end
 end
 

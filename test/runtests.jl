@@ -1,6 +1,6 @@
 using Test,WaterLilyPreCICE,StaticArrays
 
-@testset "utils.jl" begin
+@testset "Utils" begin
     # make a sim with a NoBody()
     sim = Simulation((16,16,16),(0.,0.,0.),16)
     s = WaterLilyPreCICE.Store(sim)
@@ -20,7 +20,7 @@ using Test,WaterLilyPreCICE,StaticArrays
     @test WaterLilyPreCICE.knotVectorUnpack(a) == [[0,1],[0,1]]
 end
 import LinearAlgebra: cross
-@testset "MeshBodies.jl" begin
+@testset "MeshBodies" begin
     for T in [Float32,Float64]
         # inside bbox or not
         rect = Rect(0,0,0,1,1,1) # origin and widths
@@ -85,22 +85,40 @@ import LinearAlgebra: cross
         @test all(measure(b1,SA{T}[2/3,1/3,4.1],0.) .≈ (8.f0, [0.,0.,0.], [0.,0.,0.])) # outside the bbox, not accurate
         # the single triangle has zero flux contribution as it is flat on the xy-plane
         @test all(volume(b1.mesh) .≈ volume(b1) .≈ [0.,0.,0.])
-        # test the important bits
-        L = 64 # sphere and domain size
-        sphere = MeshBody("../meshes/sphere.stl";scale=L/2,map=(x,t)->x.+L/2.f0,T)
-        flow = Flow((L,L,L),(0.,0.,0.);T)
-        apply!((x,t)->x[1],flow.p) # hydrostatic pressure
-        @test all(isapprox.(WaterLilyPreCICE.volume(sphere)./(L/4)^3,4/3*π,atol=0.06))
-        @show abs.(sum(WaterLilyPreCICE.forces(sphere,flow)))/4L^2
-        @test all(isapprox.(abs.(sum(WaterLilyPreCICE.forces(sphere,flow)))/4L^2,[0.,0.,1.16],atol=1e-2))
     end
 end
-@testset "WaterLilyPreCICE" begin
-    @test true
+@testset "GismoInterface" begin
+    Qs = collect(0:0.1:1.0)
+    @test Qs==Qs
 end
-# @testset "Interface.jl" begin
+@testset "Interface" begin
     # @test_nowarn
     # # clean-up
     # @test_nowarn rm("TEST_DIR",recursive=true)
     # @test_nowarn rm("test_vtk_reader_$D.pvd")
-# end
+    for T in [Float32,Float64]
+        # test the important bits on tris
+        sphere = MeshBody("../meshes/sphere.stl";T)
+        numberOfVertices = length(sphere.mesh.position)
+        interface = Interface([one(T)],[zero(T),zero(T)],zeros(T,numberOfVertices,3),[[1,2,3]],[T(0.25)],
+                              "rw_mesh","read_data","write_data")
+        @test_nowarn update!(sphere,interface)
+        @test all(interface.deformation .≈ zero(T))
+        @test_broken update!(interface)
+    end
+end
+@testset "WaterLilyPreCICE" begin
+    for T in [Float32,Float64]
+        # test the important bits on tris
+        L = 64 # sphere and domain size, the radius is L/4
+        sphere = MeshBody("../meshes/sphere.stl";scale=L/2,map=(x,t)->x.+L/2.f0,T)
+        flow = Flow((L,L,L),(0.,0.,0.);T)
+        apply!((x,t)->x[1],flow.p) # hydrostatic pressure
+        @test all(isapprox.(WaterLilyPreCICE.volume(sphere)./(L/4)^3,4/3*π,atol=0.06))
+        @test all(isapprox.(abs.(sum(WaterLilyPreCICE.forces(sphere,flow)))/(4π/3*(L/4)^3),[0.,0.,1.],atol=5e-2))
+        # test the important bits on quad
+        cube = MeshBody("../meshes/cube_S4.inp";scale=L/2,map=(x,t)->x.+L/2.f0,T)
+        @test all(isapprox.(WaterLilyPreCICE.volume(cube)./(L/2)^3,1,atol=1e-4))
+        @test all(isapprox.(abs.(sum(WaterLilyPreCICE.forces(cube,flow,δ=0)))/(L/2)^3,[0.,0.,1.],atol=1e-4))
+    end
+end

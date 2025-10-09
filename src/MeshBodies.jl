@@ -275,7 +275,6 @@ import WaterLily: ×,norm2
 @inbounds @inline normal(el) = hat(dS(el))
 @inbounds @inline area(el) = norm2(dS(el))
 
-
 # triangle function
 @inbounds @inline center(tri::GeometryBasics.Ngon{3,T,3}) where T = SVector(sum(tri.points)/3.f0...) #1.696 ns (0 allocations: 0 bytes)
 @inbounds @inline dS(tri::GeometryBasics.Ngon{3,T,3}) where T = dS(tri.points[2]-tri.points[1],tri.points[3]-tri.points[1]) #1.784 ns (0 allocations: 0 bytes)
@@ -375,10 +374,10 @@ end
 Calculates the forces on the body `a` in the flow `flow` using a distance `δ` to the surface.
 Only if the body is a `MeshBody` the forces are calculated.
 """
-forces(a::GeometryBasics.Mesh, flow::Flow, δ=2, boundary=Val{true}()) = map(T->get_p(T, flow.p, δ, boundary), a)
-forces(body::MeshBody, b::Flow; δ=2) = forces(body.mesh, b, δ, Val{body.boundary}())
+forces(a::GeometryBasics.Mesh, flow::Flow, δ=1, boundary=Val{true}()) = map(T->get_p(T, flow.p, δ, boundary), a)
+forces(body::MeshBody, b::Flow; δ=1) = forces(body.mesh, b, δ, Val{body.boundary}())
 forces(::AutoBody, ::Flow; kwargs...) = nothing
-function forces(a::WaterLily.SetBody, b::Flow; δ=2)
+function forces(a::WaterLily.SetBody, b::Flow; δ=1)
     fa = forces(a.a, b; δ); isnothing(fa) ? forces(a.b, b; δ) : fa
 end
 

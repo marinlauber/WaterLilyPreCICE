@@ -1,5 +1,3 @@
-using PreCICE
-
 """
     An structure to hold the coupling data for WaterLily-Gismo coupling
 """
@@ -54,7 +52,7 @@ function GismoInterface(T=Float64; dir=nothing, passive_bodies=nothing, center=0
 
     # coupling interface
     interface = GismoInterface(ControlPointsID, ControlPoints, quadPointID, quadPoint, forces,
-                                  deformation, knots, [dt], direction, length(bodies), center)
+                               deformation, knots, [dt], direction, length(bodies), center)
 
     # add some passive_bodies if we want
     for b in passive_bodies
@@ -95,7 +93,7 @@ using ParametricBodies: _pforce, _vforce
 Compute the interface forces at the quadrature points `quadPoints` for each body in `body.bodies`.
 """
 Index(Qs,i) = sum(length.(Qs[1:i-1]))+1:sum(length.(Qs[1:i]))
-using ParametricBodies: _pforce, _vforce
+# using ParametricBodies: _pforce, _vforce
 function get_forces!(interface::GismoInterface, flow::Flow{T}, body, kwargs...) where T
     # for (i,b) in enumerate(body.bodies[1:length(interface.quadPoint)]) # only select the active curves
     #     I = Index(interface.quadPoint,i)

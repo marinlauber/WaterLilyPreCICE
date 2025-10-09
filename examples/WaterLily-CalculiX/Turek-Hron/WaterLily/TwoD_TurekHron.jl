@@ -39,6 +39,9 @@ R = inside(sim.flow.p)
 @time @gif for tᵢ in range(0,duration;step)
     # update until time tᵢ in the background
     sim_step!(sim,tᵢ;remeasure=false)
+    # background ppressure
+    sim.flow.p .-= sim.flow.p[2,size(sim.flow.p,2)÷2]
+    # plot
     @inside sim.flow.σ[I] = sim.flow.p[I] #mag(I,sim.flow.u)
     @inside sim.flow.σ[I] = ifelse(sdf(sim.body,loc(0,I),0.)<0,NaN,sim.flow.σ[I])
     flood(sim.flow.σ[R],clims=(-2,2), axis=([], false),

@@ -53,10 +53,10 @@ function Interface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, bou
     ControlPointsID = PreCICE.setMeshVertices(rw_mesh, reshape(vertices, (:,3)))
 
     # construct the actual mesh now that the mapping has been computed
-    verts = GeometryBasics.Point3f[]
+    verts = Point{3,T}[]
     for i in 1:numberOfVertices
         # prepare the mesh, here we move it to the center of the domain
-        push!(verts, GeometryBasics.Point3f(vertices[:,i].*scale .+ center))
+        push!(verts, Point{3,T}(vertices[:,i].*scale .+ center))
     end
     mesh = GeometryBasics.Mesh(verts,GeometryBasics.faces(mesh))
     bbox = Rect(mesh.position)
@@ -65,8 +65,8 @@ function Interface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, bou
     body = MeshBody(mesh,deepcopy(mesh),velocity,srf_id,(x,t)->x,bbox,T(scale),T(thk/2),boundary)
 
     # storage arrays
-    forces = zeros(Float64, numberOfVertices, dimensions)
-    deformation = zeros(Float64, numberOfVertices, dimensions)
+    forces = zeros(T, numberOfVertices, dimensions)
+    deformation = zeros(T, numberOfVertices, dimensions)
 
     # mapping from center to nodes, needed for the forces
     map_id = Base.map(((i,F),)->vcat(Base.to_index.(F).data...),enumerate(faces(body.mesh)))
@@ -99,9 +99,9 @@ field provided by the `Interface`. The mesh is assumed to be in the reference co
 """
 function update!(body::MeshBody{T}, interface::S; kwargs...) where {S<:Interface,T}
     # update mesh position, measure is done elsewhere
-    points = Point3f[]
+    points = Point{3,T}[]
     for (i,pnt) in enumerate(body.mesh0.position) # initial mesh is in the ref config.
-        push!(points, Point3f(SA[pnt.data...] .+ body.scale.*interface.deformation[i,:]))
+        push!(points, Point{3,T}(SA[pnt.data...] .+ body.scale.*interface.deformation[i,:]))
     end
     # update the MeshBody with the new points
     update!(body, points, T(interface.dt[end]))
