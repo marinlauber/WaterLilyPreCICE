@@ -125,7 +125,7 @@ function compute_forces!(interface::S, flow::Flow, body::MeshBody; δ=1, kwargs.
     # compute nodal forces
     for id in 1:length(body.mesh)
         tri = body.mesh[id]
-        # map into correct part of the mesh, time does nothing
+        # map into correct part of the mesh
         f = get_p(tri, flow.p, δ, Val{body.boundary}())
         interface.forces[interface.map_id[id],:] .-= transpose(f)./N # add all the contribution from the faces to the nodes
     end

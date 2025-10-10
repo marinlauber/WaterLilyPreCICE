@@ -108,7 +108,7 @@ end
         numberOfVertices = length(sphere.mesh.position)
         interface = Interface([one(T)],[zero(T),zero(T)],zeros(T,numberOfVertices,3),[[1,2,3]],[T(0.25)],
                               "rw_mesh","read_data","write_data")
-        @test_nowarn update!(sphere,interface)
+        @test_nowarn update!(sphere,interface,one(T))
         @test all(interface.deformation .≈ zero(T))
         @test_broken update!(interface)
     end

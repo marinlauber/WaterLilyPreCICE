@@ -9,8 +9,9 @@ vtk_V(a::AbstractSimulation) = a.flow.V |> Array;
 vtk_pressure(a::AbstractSimulation) = a.flow.p |> Array;
 vtk_body(a::AbstractSimulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a.flow)); a.flow.σ |> Array;)
 vtk_ω(a::AbstractSimulation) = (@inside a.flow.σ[I] = WaterLily.curl(3,I,a.flow.u); a.flow.σ |> Array;)
-custom_attrib = Dict("u"=>vtk_velocity, "p"=>vtk_pressure, "d"=>vtk_body, "ω₃"=>vtk_ω,"V"=>vtk_V)
-
+# velocity of center of elements
+mesh_velocity(a::MeshBody) = [WaterLilyPreCICE.center(tri) for tri in a.velocity]
+mesh_forces(a::MeshBody) = WaterLilyPreCICE.forces(a, sim.flow)
 # make the sim, Re=200
 L,Re,U = 128,200,1
 D = 0.1L/0.41 # radius
@@ -33,8 +34,11 @@ sim = CoupledSimulation((6L,L), uBC, D; U, ν=U*D/Re, exitBC=true,
                          scale=1.0,center=SA[0.25L/0.41,0.2L/0.41,0],T=Float32)
 
 # make the paraview writer
-wr = vtkWriter("Turek-Hron";attrib=custom_attrib)
+wr = vtkWriter("Turek-Hron";attrib=custom_attrib = Dict("u"=>vtk_velocity, "p"=>vtk_pressure,
+               "d"=>vtk_body, "ω₃"=>vtk_ω,"V"=>vtk_V))
+wr_mesh = vtkWriter("Turek-Hron-Mesh";attrib=Dict("velocity"=>mesh_velocity,"forces"=>mesh_forces))
 save!(wr, sim)
+save!(wr_mesh, sim.body, sim_time(sim))
 
 # integrate in time
 while PreCICE.isCouplingOngoing()
@@ -55,7 +59,11 @@ while PreCICE.isCouplingOngoing()
     # if we have converged, save if required
     if PreCICE.isTimeWindowComplete()
         # save the data 4 times per convective time
-        length(sim.flow.Δt)%10==0 && save!(wr, sim)
+        if length(sim.flow.Δt)%10==0
+            save!(wr, sim)
+            compute_forces!(sim.int, sim.flow, sim.body) # true forces
+            save!(wr_mesh, sim.body, sim_time(sim))
+        end
     end
 end
 close(wr)

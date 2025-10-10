@@ -152,7 +152,7 @@ function writeData!(interface::AbstractInterface,sim::Simulation,store::Store)
         revert!(store,sim)
     end
 end
-export CoupledSimulation,readData!,writeData!
+export CoupledSimulation,readData!,writeData!,compute_forces!
 
 # the general interface type
 include("Interface.jl")
