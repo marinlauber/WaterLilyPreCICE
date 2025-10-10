@@ -32,20 +32,25 @@ end
 sim = make_sim(L=128)
 
 # duration and write steps
-duration,step = 100,0.1
+duration,step = 200,0.1
 R = inside(sim.flow.p)
 
 # run the sim
 @time @gif for tᵢ in range(0,duration;step)
     # update until time tᵢ in the background
     sim_step!(sim,tᵢ;remeasure=false)
-    # background ppressure
-    sim.flow.p .-= sim.flow.p[2,size(sim.flow.p,2)÷2]
+    # background pressure is set, outlet pressure is 0
+    sim.flow.p .-= sim.flow.p[end-2,size(sim.flow.p,2)÷2]
     # plot
-    @inside sim.flow.σ[I] = sim.flow.p[I] #mag(I,sim.flow.u)
+    @inside sim.flow.σ[I] = sim.flow.p[I]
     @inside sim.flow.σ[I] = ifelse(sdf(sim.body,loc(0,I),0.)<0,NaN,sim.flow.σ[I])
-    flood(sim.flow.σ[R],clims=(-2,2), axis=([], false),
-          cfill=:jet,legend=false,border=:none,size=size(sim.flow.p).-2)
+    p1 = flood(sim.flow.σ[R],clims=(-2,2), axis=([], false),
+               cfill=:viridis,legend=false,border=:none,size=size(sim.flow.p).-2)
+    @inside sim.flow.σ[I] = mag(I,sim.flow.u)
+    @inside sim.flow.σ[I] = ifelse(sdf(sim.body,loc(0,I),0.)<0,NaN,sim.flow.σ[I])
+    p2 = flood(sim.flow.σ[R],clims=(0,2.5), axis=([], false),
+               cfill=:jet,legend=false,border=:none,size=size(sim.flow.p).-2)
+    plot(p1,p2,layout=(2,1),size=(800,400))
     fm = 2sum(WaterLilyPreCICE.forces(sim.body, sim.flow))/(sim.L/2)^2
     println("Surface pressure force: ", round.(fm,digits=4))
     pf = 2WaterLily.pressure_force(sim.flow, sim.body.a.b)/(sim.L/2)^2

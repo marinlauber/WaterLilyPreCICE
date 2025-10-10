@@ -23,13 +23,14 @@ function Windkessel!(du,u,p,t)
     du[4] = 0.0                       # un-used u[4] hold the ventricular pressure
 end
 
-function constant_pressure(i,t,pressure)
-    i==1 && return  pressure
-    i==8 && return -pressure
-    i in [2,3,4] && return pressure
-    i in [5,6,7] && return 0.0
-    i in [9,10,11] && return  -pressure
-    i in [12,13,14] && return 0.0
+# now the pressure
+function dynamic_coupling(i,t;Plv,Pact)
+    i==1 && return  Plv
+    i==8 && return -Plv
+    i in [2,3,4] && return Plv-Pact
+    i in [5,6,7] && return Pact
+    i in [9,10,11] && return -(Plv-Pact)
+    i in [12,13,14] && return -Pact
 end
 
 # main loop
@@ -66,7 +67,7 @@ let
 
     # coupling interface
     interface = LumpedInterface(surface_mesh="../CalculiX/geom.inp",
-                                func=constant_pressure,
+                                func=dynamic_coupling,
                                 integrator=integrator)
 
     # initialise
@@ -112,7 +113,7 @@ let
 
         # we then need to recompute the forces with the correct volume and pressure
         PLV₁ = max(1, sum(interface.Δt)/10) * 1.2500
-        compute_forces!(interface, PLV₁)
+        compute_forces!(interface;Plv=PLV₁,Pact=0.0)
 
         # write data to the other participant, advance coupling
         writeData!(interface)
