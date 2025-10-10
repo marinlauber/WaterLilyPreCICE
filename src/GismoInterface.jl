@@ -65,19 +65,19 @@ end
 
 function readData!(interface::GismoInterface)
     # Read control point displacements
-    readData = transpose(PreCICE.readData("ControlPointMesh", "ControlPointData", 
+    readData = transpose(PreCICE.readData("ControlPointMesh", "ControlPointData",
                                           interface.ControlPointsID, interface.dt[end]))
     interface.deformation .= getDeformation(readData, interface.knots) # repack correctly
 end
 import ParametricBodies
-function update!(sim::CoupledSimulation, interface::GismoInterface; kwargs...)
+function update!(sim::CoupledSimulation, interface::GismoInterface, dt; kwargs...)
     # update the geom as this has not been done yet
     for i in 1:interface.N
         new = interface.ControlPoints[i].+interface.deformation[i]
         interface.dir[i] != 1 && (new = reverse(new;dims=2))
         # time step is the (numerical) time between data exchange
         new = SMatrix{size(new)...}(new.*sim.L .+ interface.center)
-        sim.body.bodies[i] = ParametricBodies.update!(sim.body.bodies[i], new, sim.flow.Δt[end])
+        sim.body.bodies[i] = ParametricBodies.update!(sim.body.bodies[i], new, dt)
     end
 end
 
@@ -94,7 +94,7 @@ Compute the interface forces at the quadrature points `quadPoints` for each body
 """
 Index(Qs,i) = sum(length.(Qs[1:i-1]))+1:sum(length.(Qs[1:i]))
 # using ParametricBodies: _pforce, _vforce
-function get_forces!(interface::GismoInterface, flow::Flow{T}, body, kwargs...) where T
+function compute_forces!(interface::GismoInterface, flow::Flow{T}, body; kwargs...) where T
     # for (i,b) in enumerate(body.bodies[1:length(interface.quadPoint)]) # only select the active curves
     #     I = Index(interface.quadPoint,i)
     #     fi = reduce(hcat,[-1.0*_pforce(b.curve,flow.p,s,zero(T),Val{false}()) for s ∈ interface.quadPoint[i]])

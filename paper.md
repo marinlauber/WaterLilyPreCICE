@@ -28,7 +28,7 @@ The code is available at [https://github.com/marinlauber/WaterLilyPreCICE](https
 
 # Statement of need
 
-Fluid-structure interaction (FSI) simulations are crucial for understanding the complex interplay between fluids and structures in various engineering applications, such as aerospace, automotive, and civil engineering.
+Fluid-structure interaction (FSI) simulations are crucial for understanding the complex interplay between fluids and structures in various engineering applications, such as aerospace, civil, maritime and biomedical engineering.
 However, setting up and running these simulations can be challenging due to the need for efficient data exchange and synchronization between different solvers, and often different programming languages.
 WaterLilyPreCICE.jl addresses this challenge by providing a Julia interface for the PreCICE coupling library, enabling seamless integration of the WaterLily fluid solver with PreCICE's robust coupling capabilities.
 This interface simplifies the process of setting up FSI simulations, allowing researchers and engineers to focus on their specific applications rather than the intricacies of coupling different solvers.

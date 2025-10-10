@@ -64,9 +64,9 @@ function Interface(T=Float64; surface_mesh="geom.inp", center=0, scale=1.f0, bou
     velocity = GeometryBasics.Mesh(zero(verts),GeometryBasics.faces(mesh))
     body = MeshBody(mesh,deepcopy(mesh),velocity,srf_id,(x,t)->x,bbox,T(scale),T(thk/2),boundary)
 
-    # storage arrays
-    forces = zeros(T, numberOfVertices, dimensions)
-    deformation = zeros(T, numberOfVertices, dimensions)
+    # storage arrays, @TODO these needs to be float64 for precice
+    forces = zeros(Float64, numberOfVertices, dimensions)
+    deformation = zeros(Float64, numberOfVertices, dimensions)
 
     # mapping from center to nodes, needed for the forces
     map_id = Base.map(((i,F),)->vcat(Base.to_index.(F).data...),enumerate(faces(body.mesh)))
@@ -97,20 +97,20 @@ end
 Updates a `MeshBody` with the current state of the `Interface`. The mesh position is updated based on the deformation
 field provided by the `Interface`. The mesh is assumed to be in the reference configuration, and the deformation is applied to it.
 """
-function update!(body::MeshBody{T}, interface::S; kwargs...) where {S<:Interface,T}
+function update!(body::MeshBody{T}, interface::S, dt; kwargs...) where {S<:Interface,T}
     # update mesh position, measure is done elsewhere
     points = Point{3,T}[]
     for (i,pnt) in enumerate(body.mesh0.position) # initial mesh is in the ref config.
         push!(points, Point{3,T}(SA[pnt.data...] .+ body.scale.*interface.deformation[i,:]))
     end
-    # update the MeshBody with the new points
-    update!(body, points, T(interface.dt[end]))
+    # update the MeshBody with the new points, time here must be converted into fluid time
+    update!(body, points, dt)
 end
-function update!(body::WaterLily.SetBody, interface::S; kwargs...) where S<:Interface
-    update!(body.a, interface; kwargs...)
-    update!(body.b, interface; kwargs...)
+function update!(body::WaterLily.SetBody, interface::S, dt; kwargs...) where S<:Interface
+    update!(body.a, interface, dt; kwargs...)
+    update!(body.b, interface, dt; kwargs...)
 end
-function update!(::AutoBody, ::Interface; kwargs...) end # do nothing for other bodies
+function update!(::AutoBody, ::Interface, dt; kwargs...) end # do nothing for other bodies
 
 """
     get_forces!(interface::S, flow::Flow, body::MeshBody; δ=1.f0, kwargs...)
@@ -118,21 +118,23 @@ function update!(::AutoBody, ::Interface; kwargs...) end # do nothing for other 
 Computes the forces on the mesh body based on the flow field and the interface. The forces are computed at the integration points
 and mapped to the nodes of the mesh body. The forces are stored in the `interface.forces` array, which is reset before computation.
 """
-function get_forces!(interface::S, flow::Flow, body::MeshBody; δ=1.f0, kwargs...) where S<:Interface
+function compute_forces!(interface::S, flow::Flow, body::MeshBody; δ=1, kwargs...) where S<:Interface
+    # how many nodes per face
+    N = length(interface.map_id[1])
     interface.forces .= 0 # reset the forces
     # compute nodal forces
     for id in 1:length(body.mesh)
         tri = body.mesh[id]
         # map into correct part of the mesh, time does nothing
         f = get_p(tri, flow.p, δ, Val{body.boundary}())
-        interface.forces[interface.map_id[id],:] .-= transpose(f)./3 # add all the contribution from the faces to the nodes
+        interface.forces[interface.map_id[id],:] .-= transpose(f)./N # add all the contribution from the faces to the nodes
     end
 end
-function get_forces!(interface::S, flow::Flow, body::WaterLily.SetBody; δ=1.f0, kwargs...) where S<:Interface
-    get_forces!(interface, flow, body.a; δ, kwargs...)
-    get_forces!(interface, flow, body.b; δ, kwargs...)
+function compute_forces!(interface::S, flow::Flow, body::WaterLily.SetBody; δ=1.f0, kwargs...) where S<:Interface
+    compute_forces!(interface, flow, body.a; δ, kwargs...)
+    compute_forces!(interface, flow, body.b; δ, kwargs...)
 end
-function get_forces!(::Interface, ::Flow, ::AutoBody; kwargs...) end # skip if not a MeshBody
+function compute_forces!(::Interface, ::Flow, ::AutoBody; kwargs...) end # skip if not a MeshBody
 
 """
     writeData!(interface::S)

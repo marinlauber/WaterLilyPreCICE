@@ -72,7 +72,7 @@ function CoupledSimulation(args...; T=Float64, mem=Array, interface=:Interface, 
                                     "of the structural mesh is zero. If this is not the case, the interface will not work as expected.")
     end
 
-    # keyword aguments might be specified
+    # keyword arguments might be specified
     if size(ARGS, 1) < 1
         configFileName = "precice-config.xml"
     else
@@ -100,26 +100,28 @@ end
 import WaterLily: sim_step!
 function sim_step!(sim::CoupledSimulation; kwargs...)
     # update the this participant this is type-specialized
-    update!(sim.body, sim.int; kwargs...)
+    update!(sim.body, sim.int, sim.flow.Δt[end]; kwargs...)
     # measure and momentum step
     measure!(sim); mom_step!(sim.flow, sim.pois)
     # get forces, this is type-specialized
-    get_forces!(sim.int, sim.flow, sim.body; kwargs...)
+    compute_forces!(sim.int, sim.flow, sim.body; kwargs...)
 end
 
-macro notimplemented(message="not implemented")
+"""
+    @abstractmethod
+
+Macro used in generic functions that must be overloaded by derived types.
+"""
+macro abstractmethod(ex)
     quote
-        error($esc(message))
+        error($ex)
     end
 end
-function update!(body, ::AbstractInterface; kwargs...)
-    @notimplemented "`update!` not implemented for `AbstractInterface`, it must to be (interface) specialized"
+function update!(body, ::AbstractInterface, dt; kwargs...)
+    @abstractmethod "`update!` not implemented for `AbstractInterface`, it must to be (interface) specialized"
 end
-function get_forces!(::AbstractInterface, args...; kwargs...)
-    @notimplemented "`get_forces!` not implemented for `AbstractInterface`, it must to be (interface) specialized"
-end
-function InitializeData!(::AbstractInterface, args...; kwargs...)
-    @notimplemented "`InitializeData!` not implemented for `AbstractInterface`, it must to be (interface) specialized"
+function compute_forces!(::AbstractInterface, args...; kwargs...)
+    @abstractmethod "`compute_forces!` not implemented for `AbstractInterface`, it must to be (interface) specialized"
 end
 
 readData!(sim::CoupledSimulation) = readData!(sim.int, sim.sim, sim.store)
@@ -150,7 +152,7 @@ function writeData!(interface::AbstractInterface,sim::Simulation,store::Store)
         revert!(store,sim)
     end
 end
-export CoupledSimulation,readData!,writeData!,InitializeData!
+export CoupledSimulation,readData!,writeData!
 
 # the general interface type
 include("Interface.jl")
@@ -165,7 +167,7 @@ include("GismoInterface.jl")
 export GismoInterface
 
 include("LumpedInterface.jl")
-export LumpedInterface,integrate!,compute_forces!
+export LumpedInterface,integrate!
 
 using Printf: @sprintf
 import WaterLily

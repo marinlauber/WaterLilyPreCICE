@@ -167,14 +167,14 @@ end
 
 Compute the forces on the interface at t+Δt.
 """
-function compute_forces!(interface::LumpedInterface, pressure; kwargs...)
+function compute_forces!(interface::LumpedInterface; kwargs...)
     # how many nodes per face
     N = length(interface.map_id[1])
     # compute nodal forces
     interface.forces .= 0 # reset the forces
     t = sum(interface.Δt)
     for (i,id) in interface.srf_id
-        f = dS(@views(interface.mesh[id])) .* interface.func(i,t,pressure)
+        f = dS(@views(interface.mesh[id])) .* interface.func(i,t;kwargs...)
         interface.forces[interface.map_id[id],:] .+= transpose(f)./N # add all the contribution from the faces to the nodes
     end
 end

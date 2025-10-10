@@ -85,6 +85,12 @@ import LinearAlgebra: cross
         @test all(measure(b1,SA{T}[2/3,1/3,4.1],0.) .≈ (8.f0, [0.,0.,0.], [0.,0.,0.])) # outside the bbox, not accurate
         # the single triangle has zero flux contribution as it is flat on the xy-plane
         @test all(volume(b1.mesh) .≈ volume(b1) .≈ [0.,0.,0.])
+        # test velocity update
+        b3 = MeshBody(mesh;map=(x,t)->x.+t,scale=1.0,T)
+        update!(b3,one(T),one(T)) # provides time and dt such that the map is x.+1
+        @test all(measure(b3,SA{T}[5/3,4/3,1],0.) .≈ (0., [0.,0.,1.], [1.,1.,1.]))
+        @test all(measure(b3,SA{T}[5/3,4/3,0],0.) .≈ (-1., [0.,0.,1.], [1.,1.,1.]))
+        @test all(measure(b3,SA{T}[5/3,4/3,5.1],0.) .≈ (8.f0, [0.,0.,0.], [0.,0.,0.])) # outside the bbox, not accurate
     end
 end
 @testset "GismoInterface" begin
