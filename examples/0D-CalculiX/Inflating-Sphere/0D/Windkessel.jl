@@ -81,7 +81,7 @@ let
         PLV₀ = PLV₁ # for next iteration or next time step
 
         # we then need to recompute the forces with the correct volume and pressure
-        compute_forces!(interface, mmHg2Pa*PLV₁)
+        compute_forces!(interface; p=mmHg2Pa*PLV₁)
 
         # write data to the other participant, advance coupling
         writeData!(interface)

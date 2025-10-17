@@ -6,7 +6,7 @@ function Elastance(t;Emin=0.0,Emax=1.0,a₁=0.303,a₂=0.508,n₁=1.32,n₂=21.9
     (Emax-Emin) * α * (t%1/a₁)^n₁ / (1+(t%1/a₁)^n₁) * inv(1+(t%1/(a₂))^n₂)  + Emin
 end
 
-# closed-loop windkessel
+# closed-loop Windkessel
 function Windkessel!(du,u,p,t)
     # unpack
     (Vlv,Pa,Pv,Plv) = u
@@ -88,7 +88,7 @@ let
         PLV₀ = PLV₁ # for next iteration or next time step
 
         # we then need to recompute the forces with the correct volume and pressure
-        compute_forces!(interface, mmHg2Pa*PLV₁)
+        compute_forces!(interface; p=mmHg2Pa*PLV₁)
 
         # write data to the other participant, advance coupling
         writeData!(interface)
