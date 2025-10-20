@@ -1,5 +1,5 @@
 using WaterLilyPreCICE,OrdinaryDiffEq
-using CSV,DataFrames,Printf
+using CSV,DataFrames,Printf,Interpolations
 
 # Double Hill function inspired by Stergiopulos et al. (DOI:10.1152/ajpheart.1996.270.6.H2050)
 function Elastance(t;Emin=0.0,Emax=1.0,a₁=0.303,a₂=0.508,n₁=1.32,n₂=21.9,α=1.672)
@@ -33,12 +33,15 @@ function dynamic_coupling(i,t;Plv,Pact)
     i in [12,13,14] && return -Pact
 end
 
+Plv_func = linear_interpolation([0.,10.,100], [0.,1.,1.])
+Pact_func = linear_interpolation([0.,10.,100.], [0.,0.,20.])
+
 # main loop
 let
      # iteration storage
     storage_step = []
     Cₕ = 0.180              # relaxation factor for the pressure
-    mmHg2Pa = 133.322387415
+    mmHg2kPa = 0.133322387415
     EDV = 120               #ml; end-diastolic volume. We will use EDV with Pvenous to calculate Emin
     Rv = 0.01               #mmHg/ml/s; resistance in forward flow direction
     Ra = 0.01               #mmHg/ml/s; resistance in forward flow direction
@@ -90,30 +93,31 @@ let
     wr = vtkWriter("pouch"; attrib=custom)
     save!(wr,interface)
 
-    # main loopO
+    # main loop
     while PreCICE.isCouplingOngoing()
 
-        # # pressure at this step, meaning sum(interface.Δt) = t
-        # Pact = 68*Elastance(sum(interface.Δt))
+        # pressure at this step, meaning sum(interface.Δt) = t
+        Pact = 27.5 * mmHg2kPa * Elastance(sum(interface.Δt) / 10)
+        # Pact = P₀ * mmHg2kPa * Pact_func(sum(interface.Δt))
 
         # read the data from the other participant, set sum(time) = t+Δt (end of this time step)
         readData!(interface)
 
-        # # solve the ODE to get VLV and Pao at t+Δt, fill the initial condition with current state
+        # solve the ODE to get VLV and Pao at t+Δt, fill the initial condition with current state
         # integrate!(interface, [[interface.u₀[2:4]..., PLV₁+Pact], interface.u₀[1]])
 
-        # # the target and current volume
+        # the target and current volume
         # VLV_0D = interface.integrator.u[1]
-        # vol = scale_vol*WaterLilyPreCICE.volume(interface)
+        vol = scale_vol*WaterLilyPreCICE.volume(interface)
 
-        # # fixed-point for the pressure
+        # fixed-point for the pressure
         # PLV₁ = max(PLV₀ + Cₕ*(VLV_0D - vol), 0.001)
         # interface.step==1 && (PLV₁ = P₀) # first time step, used EDP to get EDV
         # PLV₀ = PLV₁ # for next iteration or next time step
 
         # we then need to recompute the forces with the correct volume and pressure
-        PLV₁ = max(1, sum(interface.Δt)/10) * 1.2500
-        compute_forces!(interface;Plv=PLV₁,Pact=0.0)
+        PLV₁ = P₀ * mmHg2kPa * Plv_func(sum(interface.Δt))
+        compute_forces!(interface;Plv=PLV₁,Pact=Pact)
 
         # write data to the other participant, advance coupling
         writeData!(interface)
@@ -122,18 +126,20 @@ let
         # Pa,Pv,Plv = interface.integrator.u[2:4]
         # Qmv = Pv ≥ Plv ? (Pv-Plv)/Rv : (Plv-Pv)/1e10
         # Qao = Plv ≥ Pa ? (Plv-Pa)/Ra : (Pa-Plv)/1e10
+        VLV_0D=0; Pa=0; Qao=0; Qmv=0; Plv=0; Pv=0
 
         # save the data
-        # push!(storage_step, [interface.step, interface.iteration, sum(interface.Δt), PLV₁+Pact, Pact, vol,
-                            #  VLV_0D, Pa, Qao, Qmv, Plv, Pv])
+        push!(storage_step, [interface.step, interface.iteration, sum(interface.Δt), PLV₁+Pact, Pact, vol,
+                             VLV_0D, Pa, Qao, Qmv, Plv, Pv])
 
         # if we have converged, save if required
         if PreCICE.isTimeWindowComplete()
             (length(interface.Δt)+1)%50==0 && save!(wr,interface)
-            # out_data = reduce(vcat,storage_step')
-            # CSV.write("sphere_output.csv", DataFrame(out_data,:auto),
-            #           header=["timestep","iter","time","PLV_3D", "PACT_3D", "VLV_3D",
-            #                   "VLV_0D", "PAO_0D","QAO_0D", "QMV_0D", "PLV_0D","Pfill_0D"])
+            println(" Interface volume: $(round(vol,digits=3)) ml")
+            out_data = reduce(vcat,storage_step')
+            CSV.write("sphere_output.csv", DataFrame(out_data,:auto),
+                      header=["timestep","iter","time","PLV_3D", "PACT_3D", "VLV_3D",
+                              "VLV_0D", "PAO_0D","QAO_0D", "QMV_0D", "PLV_0D","Pfill_0D"])
         end
     end
     close(wr)

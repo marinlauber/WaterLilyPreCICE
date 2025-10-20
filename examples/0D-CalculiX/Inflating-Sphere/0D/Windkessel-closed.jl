@@ -76,7 +76,7 @@ let
         readData!(interface)
 
         # solve the ODE to get VLV and Pao at t+Δt, fill the initial condition with current state
-        integrate!(interface, [[interface.u₀[2:4]..., PLV₁+Pact], interface.u₀[1]])
+        integrate!(interface, [[interface.u₀[2:end-1]..., PLV₁+Pact], interface.u₀[1]])
 
         # the target and current volume
         VLV_0D = interface.integrator.u[1]

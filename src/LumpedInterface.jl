@@ -11,11 +11,8 @@ mutable struct LumpedInterface{T} <: AbstractInterface
     func            :: Function
     map_id          :: AbstractVector
     Δt              :: AbstractVector{T}  # time step vector
-    V               :: AbstractVector{T}  # flow rate vector
-    P               :: AbstractVector{T}  # pressure vector
     integrator      :: Union{Nothing,ODEIntegrator}
     u₀              :: Union{Nothing,AbstractVector{T}}
-    sol             :: AbstractVector
     rw_mesh         :: String
     read_data       :: String
     write_data      :: String
@@ -38,7 +35,7 @@ Arguments:
 - `write_data`: name of the data to write to the other participant, default is `"Forces"`
 - `kwargs`: additional keyword arguments to pass to PreCICE
 """
-function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t,p)->p, integrator=nothing,
+function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t;p)->p, integrator=nothing,
                          participant="LPM", rw_mesh="Solid-Mesh", read_data="Displacements", write_data="Forces",
                          kwargs...)
 
@@ -62,9 +59,9 @@ function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t,
     (ControlPointsID, ControlPoints) = PreCICE.getMeshVertexIDsAndCoordinates(rw_mesh)
     ControlPointsID = Array{Int32}(ControlPointsID)
     vertices = Array{T,2}(transpose(reshape(ControlPoints,reverse(size(ControlPoints)))))
-    verts = GeometryBasics.Point3f[]
+    verts = Point{3,T}[]
     for i in 1:size(vertices,1)
-        push!(verts, GeometryBasics.Point3f(vertices[i,:]))
+        push!(verts, Point{3,T}(vertices[i,:]))
     end
     mesh = GeometryBasics.Mesh(verts,GeometryBasics.faces(mesh0))
 
@@ -77,15 +74,12 @@ function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t,
     dt_precice = PreCICE.getMaxTimeStepSize()
 
     # generate lumped model, if the 'integrator' is not provided, we return a nothing
-    u₀ = isnothing(integrator) ? nothing : deepcopy(integrator.u)
-    V₀ = T[sum(volume(mesh))./3.]
-    sol = isnothing(integrator) ? [[]] : [[integrator.t, u₀...]]
+    u₀ = isnothing(integrator) ? nothing : T[integrator.t, integrator.u...]
     Δt = T[0] # current time is t=sum(Δt[1:end-1]), t+Δt = sum(Δt)
-    P = T[0]
 
     # return interfaceFQ
     LumpedInterface(mesh0,deepcopy(mesh),srf_id,vertices,ControlPointsID,
-                    forces,func,map_id,Δt,V₀,P,integrator,u₀,sol,rw_mesh,read_data,write_data,1,1)
+                    forces,func,map_id,Δt,integrator,u₀,rw_mesh,read_data,write_data,1,1)
 end
 
 """
@@ -93,7 +87,7 @@ end
 
 Read the coupling data (displacements) and update the mesh position.
 """
-function readData!(interface::LumpedInterface, dt_solver=1)
+function readData!(interface::LumpedInterface{T}, dt_solver=1) where T
     # write checkpoint
     if PreCICE.requiresWritingCheckpoint()
         # save initial condition of ODE solver
@@ -109,9 +103,9 @@ function readData!(interface::LumpedInterface, dt_solver=1)
     interface.deformation .= PreCICE.readData(interface.rw_mesh, interface.read_data,
                                               interface.ControlPointsID, interface.Δt[end])
     # update the mesh so that any measure on it is correct
-    points = Point3f[]
+    points = Point{3,T}[]
     for (i,pnt) in enumerate(interface.mesh0.position)
-        push!(points, Point3f(SA[pnt.data...] .+ interface.deformation[i,:]))
+        push!(points, Point{3,T}(SA[pnt.data...] .+ interface.deformation[i,:]))
     end
     interface.mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(interface.mesh0))
 end
@@ -122,8 +116,6 @@ end
 Updates the interface conditions (the forces) from the interface function.
 """
 function update!(interface::LumpedInterface, pressure; integrate=true)
-    # stores the volume
-    push!(interface.V, volume(interface))
     # update 0D model
     (!isnothing(interface.integrator) && integrate) && integrate!(interface)
     # compute forces
@@ -142,24 +134,6 @@ function integrate!(a::LumpedInterface, u_new)
     SciMLBase.set_ut!(a.integrator, u_new...)
     # solve that step up to t+Δt
     OrdinaryDiffEq.step!(a.integrator, a.Δt[end], true)
-    # save the results
-    push!(a.sol, [a.integrator.t, a.integrator.u...])
-    push!(a.P, a.integrator.u[1])
-end
-
-"""
-    get_Q(::LumpedInterface)
-
-Get the flow rate for the 0D model, either using a 1st or 2nd order scheme.
-"""
-function get_Q(a::LumpedInterface)
-    N = length(a.V)
-    # dVdt|₀ = 0.0
-    N==1 && return 0.0
-    # return sum(a.V[end-1:end].*SA[-1.,1])/a.Δt[end]
-    N<4 && return sum(@view(a.V[end-1:end]).*SA[-1.,1])/a.Δt[end]
-    # assumes that dV/dt|₀ = 0 and used 2nd order scheme
-    return sum(@view(a.V[end-2:end]).*SA[1.,-4.,3.])/2a.Δt[end]
 end
 
 """
