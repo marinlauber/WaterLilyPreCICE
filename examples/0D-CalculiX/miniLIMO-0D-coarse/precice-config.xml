@@ -33,22 +33,22 @@
 
   <m2n:sockets acceptor="LPM" connector="Calculix" exchange-directory=".."/>
 
-  <coupling-scheme:serial-explicit>
+  <!-- <coupling-scheme:serial-explicit>
     <participants first="Calculix" second="LPM"/>
     <max-time value="20.0" />
-    <time-window-size value="0.001"/>
+    <time-window-size value="0.05"/>
     <exchange data="Displacements" mesh="Solid-Mesh" from="Calculix" to="LPM" initialize="false"/>
     <exchange data="Forces" mesh="Solid-Mesh" from="LPM" to="Calculix" initialize="false"/>
-  </coupling-scheme:serial-explicit>
+  </coupling-scheme:serial-explicit> -->
 
-  <!-- <coupling-scheme:serial-implicit>
+  <coupling-scheme:serial-implicit>
     <participants first="Calculix" second="LPM"/>
-    <max-time value="10." />
-    <time-window-size value="0.001" />
+    <max-time value="20.0" />
+    <time-window-size value="0.05" />
     <max-iterations value="20"/>
     <exchange data="Displacements" mesh="Solid-Mesh" from="Calculix" to="LPM" initialize="false"/>
     <exchange data="Forces" mesh="Solid-Mesh" from="LPM" to="Calculix" initialize="false"/>
-    <relative-convergence-measure limit="1e-4" data="Forces" mesh="Solid-Mesh"/>
-  </coupling-scheme:serial-implicit> -->
+    <relative-convergence-measure limit="5e-4" data="Forces" mesh="Solid-Mesh"/>
+  </coupling-scheme:serial-implicit>
 
 </precice-configuration>

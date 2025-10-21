@@ -62,6 +62,6 @@ for i in 1:maximum(Int,data.timestep)
     plot!(p2, xs, data.PAO_0D[idx_ts], label=:none, c=:blue, lw=2)
 end
 
-# make the combined plot
+# # make the combined plot
 plot(p1, p2, p3, p4, p5, p6, layout=(2,3), size=(1200,600), dpi=300)
-# savefig("curve_3D-0D_19092025.png")
+# savefig("minilimo_3D0D.png")

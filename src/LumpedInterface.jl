@@ -129,11 +129,11 @@ Integrate the 0D model, this function will step the ODE solver from integrator.t
 integrator.t + a.Δt[end] and stops exaclty there. It will also store the solution at
 each coupling step.
 """
-function integrate!(a::LumpedInterface, u_new)
+function integrate!(a::LumpedInterface, u_new; Δt=a.Δt[end])
     # set initial conditions
     SciMLBase.set_ut!(a.integrator, u_new...)
     # solve that step up to t+Δt
-    OrdinaryDiffEq.step!(a.integrator, a.Δt[end], true)
+    OrdinaryDiffEq.step!(a.integrator, Δt, true)
 end
 
 """
