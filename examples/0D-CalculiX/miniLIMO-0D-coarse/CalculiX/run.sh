@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -e -u
 
+echo "cleaning up old files..."
+rm -f *.frd *.dat *.png *.log *.sta *.cvg *.out *.fdb *.pvd *.12d
+rm -rf datp/
+
 if [[ $# -gt 0 ]];
 then
     # run the case
