@@ -23,10 +23,10 @@ xp = collect(1:maximum(data.iter))
 time = data_conv.time
 deltat = time[2]-time[1]
 tmax = maximum(time)
-p2 = plot(time, data_conv.VLV_0D, label="VLV 0D", alpha=0.5, c=:orange, xlims=(0,tmax))
+p2 = plot(time, data_conv.VLV_0D, label="VLV 0D", alpha=0.5, c=:orange, xlims=(0,tmax), ylims=(0,140))
 plot!(p2, time, data_conv.PAO_0D, label="PAO 0D", alpha=0.5, c=:blue)
 
-p1 = plot(time, data_conv.Pfill_0D, label="Pfill 0D", c=:cyan)
+p1 = plot(time, data_conv.Pfill_0D, label="Pfill 0D", c=:cyan, ylims=(0,140))
 plot!(p1, time, data_conv.PACT_3D, label="Pact 3D", c=:magenta)
 plot!(p1, time, data_conv.PLV_0D, label="PLV 0D", c=:green)
 plot!(p1, time, data_conv.PLV_3D, c=:red, label="PLV 3D", ylabel="Pressure (mmHg)", alpha=0.5, xlims=(0,tmax))
@@ -34,11 +34,11 @@ plot!(p1, time, data_conv.PAO_0D, label="PAO 0D", alpha=0.5, c=:blue)
 plot(p2, time, data_conv.VLV_3D, c=:black, label=:none, ylabel="Volume (ml)", alpha=0.5, xlims=(0,tmax))
 
 p6 = plot(data_conv.VLV_3D, data_conv.PLV_3D, label="3D", ylabel="PLV (mmHg)", xlabel="VLV (ml)")
-plot!(p6, data_conv.VLV_0D, data_conv.PLV_0D, label="0D", c=:orange)
+plot!(p6, data_conv.VLV_0D, data_conv.PLV_0D, label="0D", c=:orange, ylims=(0,100), xlims=(60,140))
 
 # flow rates
 p5 = plot(time, -data_conv.QAO_0D./12, label="QAO 0D",
-          xlabel="time (s)", ylabel="Flow rate (ml/s)",xlims=(0,tmax))
+          xlabel="time (s)", ylabel="Flow rate (ml/s)",xlims=(0,tmax),ylims=(-50,100))
 plot!(p5, time, data_conv.QMV_0D./12, label="QMV 0D")
 
 # loop over results
@@ -64,4 +64,4 @@ end
 
 # # make the combined plot
 plot(p1, p2, p3, p4, p5, p6, layout=(2,3), size=(1200,600), dpi=300)
-# savefig("minilimo_3D0D.png")
+# savefig("minilimo_3D0D_24102025.png")

@@ -15,6 +15,7 @@ custom = Dict("SRF" =>vtk_srf,"center"=>vtk_center,"normal"=>vtk_normal,
 function Elastance(t;Emin=0.0,Emax=1.0,a₁=0.303,a₂=0.508,n₁=1.32,n₂=21.9,α=1.672)
     (Emax-Emin) * α * (t%1/a₁)^n₁ / (1+(t%1/a₁)^n₁) * inv(1+(t%1/(a₂))^n₂)  + Emin
 end
+# plot(Elastance,0:0.01:2)
 
 # closed-loop windkessel
 function Windkessel!(du,u,p,t)
@@ -22,7 +23,7 @@ function Windkessel!(du,u,p,t)
     (Vlv,Pa,Pv,Plv) = u
     (Ra,Ca,Rv,Cv,Rp) = p
 
-    # flow at the two vales
+    # flow across the valves
     Qmv = Plv < Pv ? (Pv - Plv)/Rv : (Plv - Pv)/1e10
     Qao = Plv > Pa ? (Plv - Pa)/Ra : (Pa - Plv)/1e10
 
@@ -36,35 +37,32 @@ end
 # now the pressure
 function dynamic_coupling(i,t;Plv,Pact)
     i==1 && return  Plv
-    i==8 && return -Plv
-    i in [2,3,4] && return Plv-Pact
-    i in [5,6,7] && return Pact
-    i in [9,10,11] && return -(Plv-Pact)
-    i in [12,13,14] && return -Pact
+    i==4 && return -Plv
+    i==2 && return Pact
+    i==3 && return Plv-Pact
+    i==5 && return -Pact
+    i==6 && return -(Plv-Pact)
 end
-
-Plv_func = linear_interpolation([0.,10.,100], [0.,1.,1.])
-Pact_func = linear_interpolation([0.,10.,100.], [0.,0.,20.])
-activate(t;tc=10) = t < tc ? 0 : 1
 
 # main loop
 let
      # iteration storage
     storage_step = []
-    Cₕ = 0.180              # relaxation factor for the pressure
-    Cₕ = 0.32
+    # Cₕ = 0.180              # relaxation factor for the pressure
+    Cₕ = 2.0
     mmHg2kPa = 0.133322387415
-    EDV = 120               #ml; end-diastolic volume. We will use EDV with Pvenous to calculate Emin
+    EDV = 120               #ml; end-diastolic volume.
     Rv = 0.01               #mmHg/ml/s; resistance in forward flow direction
     Ra = 0.01               #mmHg/ml/s; resistance in forward flow direction
     Rp = 1                  #mmHg/ml/s
     Ca = 2                  #ml/mmHg
     Cv = 6.0                #
+    scale = 12.5
 
     # setup
-    PLV₁ = PLV₀ = 1.0
+    PLV₁ = PLV₀ = 0.25/(mmHg2kPa/scale)
     P₀ = 6.01
-    u₀ = [EDV, 60, 6.0, P₀]           # initial conditions
+    u₀ = [EDV, 70, 8.0, P₀]           # initial conditions
     tspan = (0.0, 100.0)
     params = (Ra,Ca,Rv,Cv,Rp)
 
@@ -72,15 +70,14 @@ let
     prob = ODEProblem(Windkessel!, u₀, tspan, params)
 
     # full control over iterations
-    integrator = init(prob, Tsit5(), dtmax=0.05, reltol=1e-6, abstol=1e-9, save_everystep=false)
+    integrator = init(prob, Tsit5(), dtmax=0.001, reltol=1e-6, abstol=1e-9, save_everystep=false)
 
-    # coupling interface
-    interface = LumpedInterface(surface_mesh="../CalculiX/deformed.inp",
+    # coupling interfacep
+    interface = LumpedInterface(surface_mesh="../CalculiX/geom_deformed.inp",
                                 func=dynamic_coupling,
                                 integrator=integrator)
 
     # initialise
-    scale = 12.5
     vol0 = scale^3*WaterLilyPreCICE.volume(interface) # convert to ml
     # print zero pressure volume
     @printf("Initial volume: %.2f ml\n", vol0)
@@ -96,14 +93,13 @@ let
     while PreCICE.isCouplingOngoing()
 
         # pressure at this step, meaning sum(interface.Δt) = t
-        # Pact = 27.5 * activate(sum(interface.Δt)) * Elastance(sum(interface.Δt) / 10)
-        Pact = 4 * 27.5 * Elastance(sum(interface.Δt) / 10)
+        Pact = 128.0 * Elastance(sum(interface.Δt) / 10)
 
         # read the data from the other participant, set sum(time) = t+Δt (end of this time step)
         readData!(interface)
 
         # solve the ODE to get VLV and Pao at t+Δt, fill the initial condition with current state
-        integrate!(interface, [[interface.u₀[2:end-1]..., PLV₁+Pact], interface.u₀[1]]; Δt=interface.Δt[end] / 10)
+        integrate!(interface, [[interface.u₀[2:end-1]..., PLV₁], interface.u₀[1]]; Δt=interface.Δt[end]/10)
 
         # the target and current volume
         VLV_0D = interface.integrator.u[1]
@@ -111,32 +107,34 @@ let
         vol = vol - (vol0 - EDV) # we are actually interested in the change from the initial volume
 
         # fixed-point for the pressure
-        PLV₁ = max(PLV₀ + Cₕ*(VLV_0D - vol), 0.001)
+        PLV₁ = max(PLV₀ + Cₕ*(VLV_0D - vol), 0.01)
         @show vol, VLV_0D, PLV₁, Pact
         PLV₀ = PLV₁ # for next iteration or next time step
 
         # we then need to recompute the forces with the correct volume and pressure
-        # PLV₁ = 6.01 * Plv_func(sum(interface.Δt))
-        # PLV₁ = 6.01
-        # PLV₁ = 6.01 + (60-6.01)*sum(interface.Δt)/20
+        # PLV₁ = 6.01 + 56.0 * Elastance(sum(interface.Δt) / 10)
         compute_forces!(interface;Plv=PLV₁*mmHg2kPa/scale,Pact=Pact*mmHg2kPa/scale)
 
         # write data to the other participant, advance coupling
         writeData!(interface)
 
-        # # just to keep track of the values
+        # just to keep track of the values
         Pa,Pv,Plv = interface.integrator.u[2:4]
         Qmv = Pv ≥ Plv ? (Pv-Plv)/Rv : (Plv-Pv)/1e10
         Qao = Plv ≥ Pa ? (Plv-Pa)/Ra : (Pa-Plv)/1e10
 
         # save the data
-        push!(storage_step, [interface.step, interface.iteration, sum(interface.Δt),
+        push!(storage_step, [interface.step, interface.iteration, sum(interface.Δt)/10,
                              PLV₁, Pact, vol, VLV_0D, Pa, Qao, Qmv, Plv, Pv])
 
         # if we have converged, save if required
         if PreCICE.isTimeWindowComplete()
-            (length(interface.Δt)+1)%50==0 && save!(wr,interface)
-            println(" Interface volume: $(round(vol,digits=3)) ml")
+            (length(interface.Δt)+1)%1==0 && save!(wr,interface)
+            println(" Ventricular pressure: $(round(PLV₁,digits=3)) mmHg, ",
+                      "actuation pressure: $(round(Pact,digits=3)) mmHg, ",
+                      "Interface volume: $(round(vol,digits=3)) ml")
+            println(" Integrator time : $(round(interface.integrator.t,digits=3)) s,",
+                      " Steps: $(interface.step), Iterations: $(interface.iteration)")
             out_data = reduce(vcat,storage_step')
             CSV.write("sphere_output.csv", DataFrame(out_data,:auto),
                       header=["timestep","iter","time","PLV_3D", "PACT_3D", "VLV_3D",
