@@ -64,4 +64,4 @@ end
 
 # # make the combined plot
 plot(p1, p2, p3, p4, p5, p6, layout=(2,3), size=(1200,600), dpi=300)
-# savefig("minilimo_3D0D_24102025.png")
+savefig("minilimo_3D0D_28102025.png")

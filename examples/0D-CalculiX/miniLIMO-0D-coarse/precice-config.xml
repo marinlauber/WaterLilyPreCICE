@@ -43,7 +43,7 @@
 
   <coupling-scheme:serial-implicit>
     <participants first="Calculix" second="LPM"/>
-    <max-time value="20.0" />
+    <max-time value="40.0" />
     <time-window-size value="0.01" />
     <max-iterations value="20"/>
     <exchange data="Displacements" mesh="Solid-Mesh" from="Calculix" to="LPM" initialize="false"/>

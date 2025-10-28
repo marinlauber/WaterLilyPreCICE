@@ -17,20 +17,21 @@ function Elastance(t;Emin=0.0,Emax=1.0,a₁=0.303,a₂=0.508,n₁=1.32,n₂=21.9
 end
 # plot(Elastance,0:0.01:2)
 
-# open-loop windkessel
+# closed-loop windkessel
 function Windkessel!(du,u,p,t)
     # unpack
-    (Vlv,Pa,Plv) = u
-    (Ra,Ca,Rv,Rp,Pv)  = p
+    (Vlv,Pa,Pv,Plv) = u
+    (Ra,Ca,Rv,Cv,Rp) = p
 
-    # flow at the two vales
-    Qmv = Pv ≥ Plv ? (Pv - Plv)/Rv : (Plv - Pv)/1e10
-    Qao = Plv ≥ Pa ? (Plv - Pa)/Ra : (Pa - Plv)/1e10
+    # flow across the valves
+    Qmv = Plv < Pv ? (Pv - Plv)/Rv : (Plv - Pv)/1e10
+    Qao = Plv > Pa ? (Plv - Pa)/Ra : (Pa - Plv)/1e10
 
     # rates
-    du[1] = Qmv - Qao             # dVlv/dt=Qmv-Qao
-    du[2] = Qao/Ca - Pa/(Rp*Ca)   # dPa/dt=Qao/C-Pao/RC
-    du[3] = 0.0                   # un-used u[3] hold the ventricular pressure
+    du[1] = Qmv - Qao                 # dVlv/dt
+    du[2] = Qao/Ca + (Pv-Pa)/(Rp*Ca)  # dPa/dt
+    du[3] = (Pa-Pv)/(Rp*Cv) - Qmv/Cv  # dPv/dt
+    du[4] = 0.0                       # un-used u[4] hold the ventricular pressure
 end
 
 # now the pressure
@@ -61,10 +62,9 @@ let
     # setup
     PLV₁ = PLV₀ = 0.25/(mmHg2kPa/scale)
     P₀ = 6.01
-    u₀ = [EDV, 80, P₀]           # initial conditions
+    u₀ = [EDV, 80, 8.0, P₀]           # initial conditions
     tspan = (0.0, 100.0)
-    Pv = 10.0
-    params = (Ra,Ca,Rv,Cv,Pv)
+    params = (Ra,Ca,Rv,Cv,Rp)
 
     # generate a problem to solve
     prob = ODEProblem(Windkessel!, u₀, tspan, params)
@@ -116,7 +116,7 @@ let
         writeData!(interface)
 
         # just to keep track of the values
-        Pa,Plv = interface.integrator.u[2:3]
+        Pa,Pv,Plv = interface.integrator.u[2:4]
         Qmv = Pv ≥ Plv ? (Pv-Plv)/Rv : (Plv-Pv)/1e10
         Qao = Plv ≥ Pa ? (Plv-Pa)/Ra : (Pa-Plv)/1e10
 
