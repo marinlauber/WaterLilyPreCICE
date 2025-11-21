@@ -15,7 +15,7 @@ custom = Dict("SRF" =>vtk_srf,"center"=>vtk_center,"normal"=>vtk_normal,
 function Elastance(t;Emin=0.0,Emax=1.0,a₁=0.303,a₂=0.508,n₁=1.32,n₂=21.9,α=1.672)
     (Emax-Emin) * α * (t%1/a₁)^n₁ / (1+(t%1/a₁)^n₁) * inv(1+(t%1/(a₂))^n₂)  + Emin
 end
-# plot(Elastance,0:0.01:2)
+plot!(t,Elastance.(t),label="Double hill")
 
 # open-loop windkessel
 function Windkessel!(du,u,p,t)
@@ -50,7 +50,7 @@ let
     # Cₕ = 0.180              # relaxation factor for the pressure
     Cₕ = 2.0
     mmHg2kPa = 0.133322387415
-    EDV = 100               #ml; end-diastolic volume.
+    EDV = 120               #ml; end-diastolic volume.
     Rv = 0.01               #mmHg/ml/s; resistance in forward flow direction
     Ra = 0.01               #mmHg/ml/s; resistance in forward flow direction
     Rp = 1                  #mmHg/ml/s
@@ -62,7 +62,7 @@ let
     PLV₁ = PLV₀ = 0.25/(mmHg2kPa/scale)
     P₀ = 6.01
     u₀ = [EDV, 80, P₀]           # initial conditions
-    tspan = (0.0, 100.0)
+    tspan = (0.0, 1000.0)
     Pv = 10.0
     params = (Ra,Ca,Rv,Cv,Pv)
 

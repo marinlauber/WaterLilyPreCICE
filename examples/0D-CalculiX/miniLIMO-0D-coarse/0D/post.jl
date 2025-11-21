@@ -1,6 +1,6 @@
 using CSV,DataFrames,Plots
 # load the file
-data = CSV.read("/home/marin/Workspace/WaterLilyPreCICE/examples/0D-CalculiX/miniLIMO-0D-coarse/0D/sphere_output.csv", DataFrame; delim = ',')
+data = CSV.read(joinpath(@__DIR__,"sphere_output.csv"), DataFrame; delim = ',')
 # find all the index of the last iteration of each time step
 idx_last = [maximum([findall(data.timestep.≈i)...,1]) for i in 1:maximum(Int,data.timestep)]
 # make new dataframe with only the last iteration of each time step"
@@ -64,4 +64,4 @@ end
 
 # # make the combined plot
 plot(p1, p2, p3, p4, p5, p6, layout=(2,3), size=(1200,600), dpi=300)
-savefig("minilimo_3D0D_28102025.png")
+# savefig("minilimo_3D0D_28102025.png")
