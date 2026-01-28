@@ -28,6 +28,7 @@ mutable struct CoupledSimulation <: AbstractSimulation
 end
 # overload properties
 Base.getproperty(f::CoupledSimulation, s::Symbol) = s in propertynames(f) ? getfield(f, s) : getfield(f.sim, s)
+Base.setproperty!(f::CoupledSimulation, s::Symbol, v) = s in propertynames(f) ? setfield!(f, s, v) : setfield!(f.sim, s, v)
 
 """
     CoupledSimulation((WaterLily.Simulation inputs)...;
@@ -144,7 +145,7 @@ function writeData!(interface::AbstractInterface,sim::Simulation,store::Store)
     # write the force at the integration points
     writeData!(interface)
 
-    # do the coupling @TODO this return zeros, so don;t replace the last dt
+    # do the coupling @TODO this return zeros, so don't replace the last dt
     PreCICE.advance(interface.dt[end])
 
     # read checkpoint if required or move on
@@ -166,6 +167,7 @@ export CalculiXInterface
 include("GismoInterface.jl")
 export GismoInterface
 
+# Lumped parameter interface functions
 include("LumpedInterface.jl")
 export LumpedInterface,integrate!
 

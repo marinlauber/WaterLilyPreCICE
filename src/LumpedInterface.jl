@@ -52,23 +52,27 @@ function LumpedInterface(T=Float64; surface_mesh="../Solid/geom.inp", func=(i,t;
     # load the file
     mesh0,srf_id = load_inp(surface_mesh) # can we get rid of this?
 
+    # Define region of interest, where we want to obtain the direct access.
+    _min,_max = -1000.0, 1000.0 # required since 3.3.1
+    PreCICE.setMeshAccessRegion(rw_mesh, [_min, _max, _min, _max, _min, _max]);
+
     # initialise PreCICE
     PreCICE.initialize()
 
     # we need to initialize before we can get the mesh points and coordinates
     (ControlPointsID, ControlPoints) = PreCICE.getMeshVertexIDsAndCoordinates(rw_mesh)
     ControlPointsID = Array{Int32}(ControlPointsID)
-    vertices = Array{T,2}(transpose(reshape(ControlPoints,reverse(size(ControlPoints)))))
+    vertices = Array{T,2}(transpose(reshape(ControlPoints, reverse(size(ControlPoints)))))
     verts = Point{3,T}[]
-    for i in 1:size(vertices,1)
+    for i in 1:size(vertices, 1)
         push!(verts, Point{3,T}(vertices[i,:]))
     end
-    mesh = GeometryBasics.Mesh(verts,GeometryBasics.faces(mesh0))
+    mesh = GeometryBasics.Mesh(verts, GeometryBasics.faces(mesh0))
 
     # mapping from center to nodes, needed for the forces
     forces = zeros(T, size(ControlPoints))
     vertices .= 0 # reset since they become the displacements
-    map_id = map(((i,F),)->vcat(Base.to_index.(F).data...),enumerate(faces(mesh)))
+    map_id = map(((i,F),)->vcat(Base.to_index.(F).data...), enumerate(faces(mesh)))
 
     # time step
     dt_precice = PreCICE.getMaxTimeStepSize()
@@ -107,7 +111,7 @@ function readData!(interface::LumpedInterface{T}, dt_solver=1) where T
     for (i,pnt) in enumerate(interface.mesh0.position)
         push!(points, Point{3,T}(SA[pnt.data...] .+ interface.deformation[i,:]))
     end
-    interface.mesh = GeometryBasics.Mesh(points,GeometryBasics.faces(interface.mesh0))
+    interface.mesh = GeometryBasics.Mesh(points, GeometryBasics.faces(interface.mesh0))
 end
 
 """
@@ -126,7 +130,7 @@ end
     integrate!(a::LumpedInterface)
 
 Integrate the 0D model, this function will step the ODE solver from integrator.t to
-integrator.t + a.Δt[end] and stops exaclty there. It will also store the solution at
+integrator.t + a.Δt[end] and stops exactly there. It will also store the solution at
 each coupling step.
 """
 function integrate!(a::LumpedInterface, u_new; Δt=a.Δt[end])
@@ -149,7 +153,7 @@ function compute_forces!(interface::LumpedInterface; kwargs...)
     t = sum(interface.Δt)
     for (i,id) in interface.srf_id
         f = dS(@views(interface.mesh[id])) .* interface.func(i,t;kwargs...)
-        interface.forces[interface.map_id[id],:] .+= transpose(f)./N # add all the contribution from the faces to the nodes
+        @inbounds interface.forces[interface.map_id[id],:] .+= transpose(f)./N # add all the contribution from the faces to the nodes
     end
 end
 
@@ -181,8 +185,8 @@ end
 # volume computation for lumped interface, needs to switch signs for correct contributions
 function volume(a::LumpedInterface)
     vol = zeros(SVector{3,Float64})
-    max_id = getindex(maximum(a.srf_id),1)
-    mn,mx = getindex.(extrema(a.srf_id),1)
+    max_id = getindex(maximum(a.srf_id), 1)
+    mn,mx = getindex.(extrema(a.srf_id), 1)
     Np = (mx-2)/2
     srf = vcat(collect(1:Np+1),collect(2Np+2:3Np+2)) # inner surfaces only
     for (i,T) in enumerate(a.mesh)
