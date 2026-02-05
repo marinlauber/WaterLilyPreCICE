@@ -57,10 +57,10 @@ for sets in ["EDGE_TOP","EDGE_BOTTOM"]:
     Ar = 80.2/55.2 # from Nienke
     # map to ellipse
     dxs,dzs = map_initial(xsort,zsort,Ar,1.4)
-    plt.plot(xsort,zsort,'o',label='initial')
-    plt.plot(dxs,dzs,'x',label='mapped')
-    plt.gca().set_aspect('equal')
-    plt.show()
+    # plt.plot(xsort,zsort,'o',label='initial')
+    # plt.plot(dxs,dzs,'x',label='mapped')
+    # plt.gca().set_aspect('equal')
+    # plt.show()
     # put back in correct order
     dxs = dxs - xs[idx]
     dzs = dzs - zs[idx]
@@ -72,31 +72,3 @@ for sets in ["EDGE_TOP","EDGE_BOTTOM"]:
         BCs.write(" %d, 1, 1, %f\n" % (node,dx))
         BCs.write(" %d, 3, 3, %f\n" % (node,dz))
     BCs.close()
-
-# material properties
-E = 300_000
-nu = 0.33
-density = 0.80
-duration = 50
-t0,t1 = 10,100
-
-# # generate calculix.inp file
-calculix = Calculix()
-calculix.include(["EDGE.nam","EDGE_TOP.nam","EDGE_BOTTOM.nam"])
-
-calculix.write("*AMPLITUDE, NAME=A1, TIME=TOTAL TIME\n 0.0,0.0,%.1f,1.0,%.1f,1.0\n" % (t0,t1))
-
-calculix.set_bc("EDGE", 2, 2, 0)
-
-calculix.set_material(E,nu,density,alpha=100.0,beta=0.)
-calculix.set_thickness(1e-3,membrane=False)
-calculix.write("*STEP, NLGEOM, INC=1000000\n*DYNAMIC,ALPHA=-0.3\n 0.01, %.1f, 0.00005, 0.1\n" % duration)
-calculix.write("*BOUNDARY, AMPLITUDE=A1\n")
-calculix.write("*INCLUDE, INPUT=BCs_EDGE_TOP.nam\n")
-calculix.write("*INCLUDE, INPUT=BCs_EDGE_BOTTOM.nam\n")
-
-calculix.write("*CLOAD1\n")
-calculix.write(" Ninterface, 1, 0.0"\n)
-calculix.write(" Ninterface, 2, 0.0"\n)
-calculix.write(" Ninterface, 3, 0.0"\n)
-calculix.close("\n*EL FILE\n E, ME, S", frequency=10)

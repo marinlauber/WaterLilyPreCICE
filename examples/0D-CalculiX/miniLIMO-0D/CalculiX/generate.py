@@ -7,7 +7,7 @@ import os
 import sys
 import matplotlib.pyplot as plt
 
-sys.path.append(os.path.join(os.path.dirname( __file__ ), '../../'))
+sys.path.append("/home/marin/Workspace/HHH/code/")
 from calculix import Calculix,Mesh,replace,map_initial
 
 # get the length scale if provided
@@ -57,10 +57,10 @@ for sets in ["EDGE_TOP","EDGE_BOTTOM"]:
     Ar = 80.2/55.2 # from Nienke
     # map to ellipse
     dxs,dzs = map_initial(xsort,zsort,Ar,1.4)
-    plt.plot(xsort,zsort,'o',label='initial')
-    plt.plot(dxs,dzs,'x',label='mapped')
-    plt.gca().set_aspect('equal')
-    plt.show()
+    # plt.plot(xsort,zsort,'o',label='initial')
+    # plt.plot(dxs,dzs,'x',label='mapped')
+    # plt.gca().set_aspect('equal')
+    # plt.show()
     # put back in correct order
     dxs = dxs - xs[idx]
     dzs = dzs - zs[idx]
@@ -72,44 +72,3 @@ for sets in ["EDGE_TOP","EDGE_BOTTOM"]:
         BCs.write(" %d, 1, 1, %f\n" % (node,dx))
         BCs.write(" %d, 3, 3, %f\n" % (node,dz))
     BCs.close()
-
-# material properties
-E = 300_000
-nu = 0.33
-density = 0.80
-PV =  0.25 # ventricle pressure
-duration = 50
-t0,t1 = 10,100
-
-# # generate calculix.inp file
-calculix = Calculix()
-calculix.include(["EDGE.nam","EDGE_TOP.nam","EDGE_BOTTOM.nam"])
-
-calculix.write("*AMPLITUDE, NAME=A1, TIME=TOTAL TIME\n 0.0,0.0,%.1f,1.0,%.1f,1.0\n" % (t0,t1))
-calculix.write("*AMPLITUDE, NAME=A2, TIME=TOTAL TIME\n 0.0,0.0,%.1f,1.0,%.1f,10.0\n" % (t0,t1))
-calculix.write("*AMPLITUDE, NAME=A3, TIME=TOTAL TIME\n 0.0,0.0,%.1f,1.0,%.1f,-9.0\n" % (t0,t1))
-
-calculix.set_bc("EDGE", 2, 2, 0)
-
-calculix.set_material(E,nu,density,alpha=100.0,beta=0.)
-calculix.set_thickness(1e-3,membrane=False)
-calculix.write("*STEP, NLGEOM, INC=1000000\n*DYNAMIC\n 0.01, %.1f, 0.00005, 0.1\n" % duration)
-calculix.write("*BOUNDARY, AMPLITUDE=A1\n")
-calculix.write("*INCLUDE, INPUT=BCs_EDGE_TOP.nam\n")
-calculix.write("*INCLUDE, INPUT=BCs_EDGE_BOTTOM.nam\n")
-
-calculix.write("*DLOAD, AMPLITUDE=A1\n")
-calculix.write(" SRF_1, P1, %.4f\n SRF_8, P1, %.4f\n" % (PV, -PV))
-calculix.write("*DLOAD, AMPLITUDE=A3\n")
-for id in [2,3,4]:
-    calculix.write(" SRF_%d, P1, %.4f\n" % (id, PV))
-calculix.write("*DLOAD, AMPLITUDE=A2\n")
-for id in [5,6,7]:
-    calculix.write(" SRF_%d, P1, %.4f\n" % (id, PV))
-calculix.write("*DLOAD, AMPLITUDE=A3\n")
-for id in [9,10,11]:
-    calculix.write(" SRF_%d, P1, %.4f\n" % (id, -PV))
-calculix.write("*DLOAD, AMPLITUDE=A2\n")
-for id in [12,13,14]:
-    calculix.write(" SRF_%d, P1, %.4f\n" % (id, -PV))
-calculix.close("\n*EL FILE\n E, ME, S", frequency=10)

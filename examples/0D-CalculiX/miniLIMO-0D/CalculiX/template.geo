@@ -72,6 +72,6 @@ Curve Loop(5) = {13, 20, 9, 10, 11, 12};
 Plane Surface(4) = {5};
 
 // mesh definition
-Characteristic Length{ PointsOf{ Surface{1,2,3,4}; } } = 0.02;
+Characteristic Length{ PointsOf{ Surface{1,2,3,4}; } } = 0.03;
 Recombine Surface{1,2,3,4};
 

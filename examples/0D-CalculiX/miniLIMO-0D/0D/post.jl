@@ -1,6 +1,6 @@
 using CSV,DataFrames,Plots
 # load the file
-data = CSV.read("/home/marin/Workspace/WaterLilyPreCICE/examples/0D-CalculiX/miniLIMO-0D/0D/sphere_output.csv", DataFrame; delim = ',')
+data = CSV.read(joinpath(@__DIR__,"sphere_output.csv"), DataFrame; delim = ',')
 # find all the index of the last iteration of each time step
 idx_last = [maximum([findall(data.timestep.≈i)...,1]) for i in 1:maximum(Int,data.timestep)]
 # make new dataframe with only the last iteration of each time step

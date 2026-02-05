@@ -20,7 +20,7 @@
   </mesh>
 
   <participant name="LPM">
-    <receive-mesh name="Solid-Mesh" from="Calculix"/>
+    <receive-mesh name="Solid-Mesh" from="Calculix" api-access="true"/>
     <write-data name="Forces" mesh="Solid-Mesh"/>
     <read-data  name="Displacements" mesh="Solid-Mesh"/>
   </participant>
@@ -44,7 +44,7 @@
   <coupling-scheme:serial-implicit>
     <participants first="Calculix" second="LPM"/>
     <max-time value="100.0" />
-    <time-window-size value="0.01" />
+    <time-window-size value="0.005" />
     <max-iterations value="20"/>
     <exchange data="Displacements" mesh="Solid-Mesh" from="Calculix" to="LPM" initialize="false"/>
     <exchange data="Forces" mesh="Solid-Mesh" from="LPM" to="Calculix" initialize="false"/>

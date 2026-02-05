@@ -9,7 +9,7 @@
 ** units are in [m, kg, s], so Pre = kg/(m*S^2) = 1 N/m^2 [Pa]
 *MATERIAL,NAME=RUBBER
 *ELASTIC
- 4e4, 0.4
+ 4e6, 0.4
 *DENSITY
  3e3
 *DAMPING, ALPHA=0.00, BETA=0.00

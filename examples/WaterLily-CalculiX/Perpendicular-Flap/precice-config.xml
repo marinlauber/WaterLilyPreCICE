@@ -43,8 +43,8 @@
 
   <coupling-scheme:serial-explicit>
     <participants first="Calculix" second="WaterLily"/>
-    <max-time value="640.0" />
-    <time-window-size value="0.2"/>
+    <max-time value="30.0" />
+    <time-window-size value="0.005"/>
     <exchange data="Displacements" mesh="Solid-Mesh" from="Calculix" to="WaterLily"/>
     <exchange data="Forces" mesh="Solid-Mesh" from="WaterLily" to="Calculix"/>
   </coupling-scheme:serial-explicit>

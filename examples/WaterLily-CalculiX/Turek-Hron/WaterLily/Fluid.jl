@@ -6,7 +6,8 @@ pin!(a::AbstractArray) = (a .-= a[end-1,size(a,2)÷2])
 # make a writer with some attributes to output to the file
 vtk_velocity(a::AbstractSimulation) = a.flow.u |> Array;
 vtk_V(a::AbstractSimulation) = a.flow.V |> Array;
-vtk_pressure(a::AbstractSimulation) = a.flow.p |> Array;
+vtk_pressure(a::AbstractSimulation) = (@inside a.flow.σ[I] = a.flow.p[I];
+                                       @inside a.flow.σ[I] = ifelse(sdf(a.body,loc(0,I),0.)<0,NaN,a.flow.σ[I]); a.flow.σ |> Array;)
 vtk_body(a::AbstractSimulation) = (measure_sdf!(a.flow.σ, a.body, WaterLily.time(a.flow)); a.flow.σ |> Array;)
 vtk_ω(a::AbstractSimulation) = (@inside a.flow.σ[I] = WaterLily.curl(3,I,a.flow.u); a.flow.σ |> Array;)
 # velocity of center of elements
@@ -35,7 +36,7 @@ sim = CoupledSimulation((6L,L), uBC, D; U, ν=U*D/Re, exitBC=true,
 
 # make the paraview writer
 wr = vtkWriter("Turek-Hron";attrib=custom_attrib = Dict("u"=>vtk_velocity, "p"=>vtk_pressure,
-               "d"=>vtk_body, "ω₃"=>vtk_ω,"V"=>vtk_V))
+                                                        "d"=>vtk_body, "ω₃"=>vtk_ω,"V"=>vtk_V))
 wr_mesh = vtkWriter("Turek-Hron-Mesh";attrib=Dict("velocity"=>mesh_velocity,"forces"=>mesh_forces))
 save!(wr, sim)
 save!(wr_mesh, sim.body, sim_time(sim))
@@ -50,22 +51,20 @@ while PreCICE.isCouplingOngoing()
     sim_step!(sim); pin!(sim.flow.p)
 
     # force computation
+    compute_forces!(sim.int, sim.flow, sim.body) # true forces
     sim.int.forces .=  0
-    sim.int.forces[:,2] .= 0.2*sim.U^2/sim.L*sin(2π*0.19*sim_time(sim))
+    sim.int.forces[:,2] .= 0.4*sim.U^2/sim.L*sin(2π*0.19*sim_time(sim))
 
     # write data to the other participant
     writeData!(sim)
 
     # if we have converged, save if required
-    if PreCICE.isTimeWindowComplete()
-        # save the data 4 times per convective time
-        if length(sim.flow.Δt)%10==0
-            save!(wr, sim)
-            compute_forces!(sim.int, sim.flow, sim.body) # true forces
-            save!(wr_mesh, sim.body, sim_time(sim))
-        end
+    if PreCICE.isTimeWindowComplete() && (length(sim.flow.Δt)%10==0)
+        save!(wr, sim)
+        compute_forces!(sim.int, sim.flow, sim.body) # true forces
+        save!(wr_mesh, sim.body, sim_time(sim))
     end
 end
-close(wr)
+close(wr); close(wr_mesh)
 PreCICE.finalize()
 println("WaterLily: Closing Julia solver...")

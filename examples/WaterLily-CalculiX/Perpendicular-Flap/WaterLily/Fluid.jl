@@ -29,12 +29,12 @@ L,Re,U = 64,100,1.f0
 # velocity profile of Turek Hron
 function uBC(i,x::SVector{N,T},t) where {N,T}
     i ≠ 1 && return convert(T, 0.0)
-    return 1.5f0≤x[2]≤4L-1.5f0 ? C(t) : zero(T)
+    return 1.5f0≤x[2]≤4L-1.5f0 ? C(t/L) : eps(T)
 end
 
 
 # make a sim
-sim = CoupledSimulation((6L,4L), uBC, L; U, ν=U*L/Re, exitBC=true,
+sim = CoupledSimulation((10L,4L), uBC, L; U, ν=U*L/Re, exitBC=false,
                          surface_mesh=joinpath(@__DIR__,"../CalculiX/surface.inp"),
                          passive_bodies=[AutoBody((x,t)->2L - abs(x[2]-2L) - 1.5f0)], # wall at ±2L
                          scale=1.0, center=SA[3L,0,0], T=Float32)
@@ -54,7 +54,8 @@ while PreCICE.isCouplingOngoing()
     readData!(sim)
 
     # update the this participant and scale forces
-    sim_step!(sim); #sim.int.forces .*= sim.U^2/2sim.L
+    sim_step!(sim); #sim.int.forces .*= sim.L^2/sim.U^2
+    sim.int.forces[:,1] .= 1000*C(sim_time(sim)/sim.L)*sim.L^2
     sim.int.forces[:,2] .= 0.0 # zero-spanwise forces
     println(sum(sim.int.forces,dims=1)./size(sim.int.forces,1)) # print the average force
 
