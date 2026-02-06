@@ -1,6 +1,8 @@
 using CSV,DataFrames,Plots
 # load the file
-data = CSV.read(joinpath(@__DIR__,"ConstantFlow.csv"), DataFrame; delim = ',')
+# data = CSV.read(joinpath(@__DIR__,"ConstantFlow.csv"), DataFrame; delim = ',')
+# data = CSV.read(joinpath(@__DIR__,"Windkessel_open.csv"), DataFrame; delim = ',')
+data = CSV.read(joinpath(@__DIR__,"Windkessel_closed.csv"), DataFrame; delim = ',')
 # find all the index of the last iteration of each time step
 idx_last = [maximum([findall(data.timestep.≈i)...,1]) for i in 1:maximum(Int,data.timestep)]
 # make new dataframe with only the last iteration of each time step
@@ -30,4 +32,4 @@ plot!(p6, data_conv.Vlv_0D, data_conv.Plv_0D, label="0D", ls=:dashdotdot, lw=3, 
 
 # make the combined plot
 plot(p1, p6, layout=(1,2), size=(1200,600), dpi=300)
-savefig("presssure_volume_sphere.png")
+savefig("pressure_volume_sphere.png")
