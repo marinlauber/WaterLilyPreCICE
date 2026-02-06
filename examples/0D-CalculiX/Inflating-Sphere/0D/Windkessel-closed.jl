@@ -30,25 +30,19 @@ end
 let
      # iteration storage
     storage_step = []
-    Cₕ = 0.180              # relaxation factor for the pressure
+    ω⁰ = 0.180              # relaxation factor for the pressure
     mmHg2Pa = 133.322387415
     EDV = 120               #ml; end-diastolic volume. We will use EDV with Pvenous to calculate Emin
     Rv = 0.01               #mmHg/ml/s; resistance in forward flow direction
     Ra = 0.01               #mmHg/ml/s; resistance in forward flow direction
     Rp = 1                  #mmHg/ml/s
     Ca = 2                  #ml/mmHg
-    Cv = 6.0                #
-
-    # Ra = 8e6 * 1.333e-8
-    # Rp = 3e8 * 1.333e-8
-    # Rv = 1e6 * 1.333e-8
-    # Ca = 8e-9 * 1.333e8
-    # Cv = 5e-8 * 1.333e8
+    Cv = 6.0                #mmHg/ml/s; compliance of the venous system
 
     # setup
-    PLV₁ = PLV₀ = 1.0
-    P₀ = 6.01
-    u₀ = [EDV, 60, 6.0, P₀]           # initial conditions
+    Plv_k = Plv_0 = 1.0
+    Pv = 6.01
+    u₀ = [EDV, 60, 6.0, Pv]           # initial conditions
     tspan = (0.0, 10.0)
     params = (Ra,Ca,Rv,Cv,Rp)
 
@@ -63,9 +57,8 @@ let
 
     # initialise
     scale_vol = 90.0
-    vol0 = scale_vol*get_volume(interface.mesh0) # convert to ml
-    # print zero pressure volume
-    @printf("Initial volume: %.2f ml\n", vol0)
+    ESV = scale_vol*get_volume(interface.mesh0) # convert to ml
+    @printf("Initial volume: %.2f ml\n", ESV)
 
     while PreCICE.isCouplingOngoing()
 
@@ -76,19 +69,19 @@ let
         readData!(interface)
 
         # solve the ODE to get VLV and Pao at t+Δt, fill the initial condition with current state
-        integrate!(interface, [[interface.u₀[2:end-1]..., PLV₁+Pact], interface.u₀[1]])
+        integrate!(interface, [[interface.u₀[2:end-1]..., Plv_k+Pact], interface.u₀[1]])
 
-        # the target and current volume
-        VLV_0D = interface.integrator.u[1]
-        vol = scale_vol*get_volume(interface.mesh)
+        # the target and current Vlv_3Dume
+        Vlv_0D = interface.integrator.u[1]
+        Vlv_3D = scale_vol*get_volume(interface.mesh)
 
         # fixed-point for the pressure
-        PLV₁ = max(PLV₀ + Cₕ*(VLV_0D - vol), 0.001)
-        interface.step==1 && (PLV₁ = P₀) # first time step, used EDP to get EDV
-        PLV₀ = PLV₁ # for next iteration or next time step
+        Plv_k = max(Plv_0 + ω⁰*(Vlv_0D - Vlv_3D), 0.001)
+        interface.step==1 && (Plv_k = Pv) # first time step, used EDP to get EDV
+        Plv_0 = Plv_k # for next iteration or next time step
 
-        # we then need to recompute the forces with the correct volume and pressure
-        compute_forces!(interface; p=mmHg2Pa*PLV₁)
+        # we then need to recompute the forces with the correct Vlv_3Dume and pressure
+        compute_forces!(interface; p=mmHg2Pa*Plv_k)
 
         # write data to the other participant, advance coupling
         writeData!(interface)
@@ -99,15 +92,15 @@ let
         Qao = Plv ≥ Pa ? (Plv-Pa)/Ra : (Pa-Plv)/1e10
 
         # save the data
-        push!(storage_step, [interface.step, interface.iteration, sum(interface.Δt), PLV₁+Pact, Pact, vol,
-                             VLV_0D, Pa, Qao, Qmv, Plv, Pv])
+        push!(storage_step, [interface.step, interface.iteration, sum(interface.Δt),
+                             Plv_k+Pact, Pact, Vlv_3D, Vlv_0D, Pa, Qao, Qmv, Plv, Pv])
 
         # if we have converged, save if required
         if PreCICE.isTimeWindowComplete()
             out_data = reduce(vcat,storage_step')
-            CSV.write("sphere_output.csv", DataFrame(out_data,:auto),
-                      header=["timestep","iter","time","PLV_3D", "PACT_3D", "VLV_3D",
-                              "VLV_0D", "PAO_0D","QAO_0D", "QMV_0D", "PLV_0D","Pfill_0D"])
+            CSV.write("Windkessel_closed.csv", DataFrame(out_data,:auto),
+                      header=["timestep","iter","time","Plv_3D", "Pact_3D", "Vlv_3D",
+                              "Vlv_0D", "Pao_0D","Qao_0D", "Qmv_0D", "Plv_0D","Pfill_0D"])
         end
     end
     PreCICE.finalize()
