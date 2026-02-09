@@ -30,7 +30,7 @@ end
 let
      # iteration storage
     storage_step = []
-    ω⁰ = 0.180              # relaxation factor for the pressure
+    ω⁰ = 0.036              # relaxation factor for the pressure
     mmHg2Pa = 133.322387415
     EDV = 120               #ml; end-diastolic volume. We will use EDV with Pvenous to calculate Emin
     Rv = 0.01               #mmHg/ml/s; resistance in forward flow direction
@@ -40,7 +40,7 @@ let
     Cv = 6.0                #mmHg/ml/s; compliance of the venous system
 
     # setup
-    Plv_k = Plv_0 = 1.0
+    Plv_k = Plv_0 = 0.0
     Pv = 6.01
     u₀ = [EDV, 60, 6.0, Pv]           # initial conditions
     tspan = (0.0, 10.0)
@@ -76,8 +76,9 @@ let
         Vlv_3D = scale_vol*get_volume(interface.mesh)
 
         # fixed-point for the pressure
-        Plv_k = max(Plv_0 + ω⁰*(Vlv_0D - Vlv_3D), 0.001)
-        interface.step==1 && (Plv_k = Pv) # first time step, used EDP to get EDV
+        Plv_k = Plv_0 + ω⁰*(Vlv_0D - Vlv_3D)
+        @show Plv_k, Vlv_0D, Vlv_3D
+        # interface.step==1 && (Plv_k = Pv) # first time step, used EDP to get EDV
         Plv_0 = Plv_k # for next iteration or next time step
 
         # we then need to recompute the forces with the correct Vlv_3Dume and pressure
